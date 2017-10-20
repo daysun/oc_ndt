@@ -1,8 +1,0 @@
-prefix=/home/daysun/rros/src/oc_ndt/build/devel
-
-Name: oc_ndt
-Description: Description of oc_ndt
-Version: 0.0.0
-Cflags: 
-Libs: -L/home/daysun/rros/src/oc_ndt/build/devel/lib 
-Requires: 
