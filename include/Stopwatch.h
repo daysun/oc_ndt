@@ -3,7 +3,14 @@
 #include<iostream>
 #include<string>
 #include <sstream>
+#include <cmath>
 using namespace std;
+
+string stringAndFloat(string a, float b){
+    ostringstream oss;
+       oss << a << b << endl;
+       return oss.str() ;
+}
 
 double stopwatch()
 {
@@ -30,6 +37,13 @@ string intToString(int k){
    ss<<k;
    string str = ss.str();
    return str;
+}
+
+int strToInt(string s){
+    int num;
+       stringstream ss(s);
+       ss >> num;
+       return num;
 }
 
 int binToDec(int k){

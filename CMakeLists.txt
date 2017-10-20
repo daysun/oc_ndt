@@ -5,15 +5,14 @@ find_package(catkin REQUIRED COMPONENTS
  sensor_msgs tf
 message_generation geometry_msgs std_msgs
 cmake_modules
+visualization_msgs
   roscpp
   sensor_msgs
   nodelet
   pcl_ros
 )
 find_package(octomap REQUIRED)
-# 增加PCL库的依赖
 FIND_PACKAGE( PCL REQUIRED COMPONENTS common io )
-
 find_package(OpenCV 3.0 QUIET)
 if(NOT OpenCV_FOUND)
    find_package(OpenCV 2.4.3 QUIET)
@@ -22,41 +21,66 @@ if(NOT OpenCV_FOUND)
    endif()
 endif()
 
+FIND_PACKAGE(OpenGL)
+FIND_PACKAGE(Qt4)
+IF (OpenGL-NOTFOUND OR Qt4-NOTFOUND)
+        MESSAGE ( "OpenGL and QT4 are required for octovis but could not be found.")
+ELSE()
+        FIND_PACKAGE(QGLViewer)
+        IF(QGLViewer_FOUND)
+          SET( BUILD_VIEWER 1)
+        ELSE()
+          MESSAGE ( "\n")
+        MESSAGE ( "libQGLViewer could not be found or generated.")
+        ENDIF()
+ENDIF()
+
 catkin_package(
   DEPENDS sensor_msgs tf  message_runtime geometry_msgs std_msgs)
-#${PROJECT_NAME}
 
-# 添加头文件和库文件
 ADD_DEFINITIONS( ${PCL_DEFINITIONS} )
 INCLUDE_DIRECTORIES( ${PCL_INCLUDE_DIRS}  )
 LINK_LIBRARIES( ${PCL_LIBRARY_DIRS} )
 
-# octomap
-#FIND_PACKAGE( octomap REQUIRED )
-#INCLUDE_DIRECTORIES( ${OCTOMAP_INCLUDE_DIRS} )
-
 include_directories(${catkin_INCLUDE_DIRS})
 link_directories(${catkin_LIBRARY_DIRS})
 link_libraries( ${catkin_LIBRARIES})
-#${PROJECT_NAME}
-
-include_directories(${OCTOMAP_INCLUDE_DIRS})
-link_directories(${OCTOMAP_LIBRARY_DIRS})
-link_libraries( ${OCTOMAP_LIBRARIES})
-#${PROJECT_NAME}
 
 include_directories(include)
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_executable(uniformDivision
+#publish the point
+add_executable(publishPoint
+ src/publisher.cpp)
+target_link_libraries(publishPoint
+${PCL_LIBRARIES} )
+
+#receive the point and pocess the data
+add_executable(receivePoint
      include/Stopwatch.h
       include/Vec2.h
      include/Vec3.h
-     include/2Dmap.h
- src/uniformDivision.cpp)
-target_link_libraries(uniformDivision
+     include/map2D.h
+     include/robot.h
+ src/receiver.cpp)
+target_link_libraries(receivePoint
 ${PCL_LIBRARIES}
-${OpenCV_LIBS} )
+ ${OpenCV_LIBS} )
+
+#add_executable(uniformDivision
+#     include/Stopwatch.h
+#      include/Vec2.h
+#     include/Vec3.h
+#     include/2Dmap.h
+# src/uniformDivision.cpp)
+#target_link_libraries(uniformDivision
+#${PCL_LIBRARIES}
+#${OpenCV_LIBS} )
+
+add_executable(test_small
+ src/test/test_write_pcl.cpp)
+target_link_libraries(test_small
+${PCL_LIBRARIES})
 
 #add_executable(octreeDivision
 #     include/Stopwatch.h
@@ -64,18 +88,6 @@ ${OpenCV_LIBS} )
 #     include/Vec3.h
 # src/octreeDivision.cpp)
 #target_link_libraries(octreeDivision
-#${PCL_LIBRARIES}
-#${OpenCV_LIBS} )
-
-#add_executable(pclCountNormal
-# src/pclCountNormal.cpp)
-#target_link_libraries(pclCountNormal
-#${PCL_LIBRARIES}
-#${OpenCV_LIBS} )
-
-#add_executable(test123
-# src/test.cpp)
-#target_link_libraries(test123
 #${PCL_LIBRARIES}
 #${OpenCV_LIBS} )
 
