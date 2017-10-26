@@ -5,9 +5,12 @@
 #include<pcl_conversions/pcl_conversions.h>
 #include<sensor_msgs/PointCloud2.h>
 #include <sstream>
+#include <iostream>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/statistical_outlier_removal.h>
-#include <limits.h>
+
 
 bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud)
 {
@@ -29,6 +32,14 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
     sor.setStddevMulThresh (1.5);
     sor.filter (*cloud);
     std::cerr << "Cloud after filtering: " << cloud->points.size()<<std::endl;
+
+    //present as red
+    for(size_t i=0;i<cloud->points.size();i++){
+        cloud->points[i].x += 5;
+        cloud->points[i].y -= 1;
+    }
+//    pcl::PCDWriter writer;
+//    writer.write<pcl::PointXYZ> ("table_filter2.pcd", *cloud, false);
   return true;
 }
 
@@ -36,17 +47,19 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "publisher");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<sensor_msgs::PointCloud2>("publisher/cloud_fullSys", INT_MAX);
+  ros::Publisher chatter_pub = n.advertise<sensor_msgs::PointCloud2>("publisher/cloud_change", 1000);
    sensor_msgs::PointCloud2 output;
-   std::string cloud_path("src/oc_ndt/data/test.pcd"); //test-29 sample-4.5 table-2.8 sys-18
+   std::string cloud_path("src/oc_ndt/data/test.pcd");
    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
 
    if (!loadCloud(cloud_path,cloud))
      return -1;
-   pcl::toROSMsg(*cloud,output);
 
-       if(chatter_pub.getNumSubscribers() == 1) {
-            chatter_pub.publish(output);
-       }
+   pcl::toROSMsg(*cloud,output);
+    output.header.frame_id = "/my_frame";
+   if(chatter_pub.getNumSubscribers()) {
+        chatter_pub.publish(output);
+   }
   return 0;
 }
+

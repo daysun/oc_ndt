@@ -55,6 +55,18 @@ add_executable(publishPoint
 target_link_libraries(publishPoint
 ${PCL_LIBRARIES} )
 
+#publish change
+add_executable(publishChangePoint
+ src/publishChange.cpp)
+target_link_libraries(publishChangePoint
+${PCL_LIBRARIES} )
+
+#publish change
+add_executable(testCU
+ src/test/test_c_u.cpp)
+target_link_libraries(testCU
+${PCL_LIBRARIES} )
+
 #receive the point and pocess the data
 add_executable(receivePoint
      include/Stopwatch.h
