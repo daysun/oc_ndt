@@ -43,6 +43,7 @@ int main(int argc, char **argv)
 
    if (!loadCloud(cloud_path,cloud))
      return -1;
+
    pcl::toROSMsg(*cloud,output);
 
        if(chatter_pub.getNumSubscribers() == 1) {

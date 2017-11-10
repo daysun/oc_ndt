@@ -12,10 +12,18 @@
 #include<map>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include <boost/thread/thread.hpp>
+#include <pcl/common/common_headers.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/console/parse.h>
 using namespace Eigen;
 using namespace std;
 
-
+int test_paint(){
+    return 10;
+}
 
 struct OcNode
 {
@@ -97,14 +105,12 @@ public:
 };
 
 class TwoDmap {
-    float gridLen; //resolution
-
+    float gridLen; //resolution   
 public:
     TwoDmap(const float res):gridLen(res){}
     float getGridLen(){return gridLen;}
     list<int> morton_list;
     list<Cell *> cell_list;
-
     ~TwoDmap() {
         list<Cell *>::iterator pos,pos2;
         for (pos=cell_list.begin(); pos !=cell_list.end(); ++pos)
@@ -113,6 +119,64 @@ public:
                   delete *pos2;
                   pos++;
                   cell_list.erase(pos2);
+        }
+    }
+
+    //for visualization
+    void showSlope(){
+        boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+        viewer->setBackgroundColor (0, 0, 0);
+        viewer->setRepresentationToSurfaceForAllActors();
+        viewer->addCoordinateSystem (1.0);
+        viewer->initCameraParameters ();
+        pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
+        //for every cell
+        if(cell_list.size() != 0){
+            int i = 0;
+        list<Cell *>::iterator cell_iter= cell_list.begin();
+        while(cell_iter != cell_list.end()){
+             Cell * cell = (*cell_iter);
+            //for every slope
+            if(cell->slope_list.size() != 0){
+                list<Slope *>::iterator slope_iter = (*cell_iter)->slope_list.begin();
+                while(slope_iter != (*cell_iter)->slope_list.end()){
+                     i++;
+                    Vector3f normal = (*slope_iter)->normal;
+                    Vec3 mean = (*slope_iter)->mean;
+                    //add points
+                    pcl::PointXYZ basic_point;
+                    basic_point.x = normal(0);
+                    basic_point.y = normal(1);
+                    basic_point.z = normal(2);
+                    point_cloud_ptr->points.push_back (basic_point);
+//                     viewer->addSphere (basic_point, 0.2, 0.2, 0.2, 0.0,"sphere"+i);
+                    //add plane --some problems
+//                    float a= normal(0),b = normal(1), c= normal(2);
+//                    float d = -a*mean.x -b*mean.y - c*mean.z;
+//                    cout<<a<<","<<b<<","<<c<<","<<d<<endl;
+//                    pcl::ModelCoefficients coeffs;
+//                    coeffs.values.push_back (a);
+//                    coeffs.values.push_back (b);
+//                    coeffs.values.push_back (c);
+//                    coeffs.values.push_back (d);
+//                    viewer->addPlane (coeffs, "plane"+i);
+                    slope_iter++;
+                }
+            }
+            cell_iter++;
+        }
+        }
+
+        viewer->addPointCloud<pcl::PointXYZ> (point_cloud_ptr, "sample cloud");
+        viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
+        viewer->setRepresentationToSurfaceForAllActors();
+        viewer->addCoordinateSystem (1.0);
+        viewer->initCameraParameters ();
+
+        while (!viewer->wasStopped ())
+        {
+          viewer->spinOnce (100);
+          boost::this_thread::sleep (boost::posix_time::microseconds (100000));
         }
     }
 

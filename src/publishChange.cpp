@@ -37,6 +37,7 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
     for(size_t i=0;i<cloud->points.size();i++){
         cloud->points[i].x += 5;
         cloud->points[i].y -= 1;
+        cloud->points[i].z += 3;
     }
 //    pcl::PCDWriter writer;
 //    writer.write<pcl::PointXYZ> ("table_filter2.pcd", *cloud, false);

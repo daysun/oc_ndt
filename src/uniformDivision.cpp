@@ -19,9 +19,6 @@
 #include <pcl/common/transforms.h>
 using namespace Eigen;
 using namespace std;
-
-
-using namespace std;
 typedef multimap<int,OcNode *>  MAP_INT_MORTON_MULTI;
 typedef multimap<int,OcNode *>::iterator iterIntNode;
 
@@ -31,7 +28,7 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
 {
   std::cout << "Loading file " << filename.c_str() << std::endl;
   //read cloud
-  if (pcl::io::loadPCDFile("src/oc_ndt/data/test.pcd", *cloud))
+  if (pcl::io::loadPCDFile(filename, *cloud))
   {
     std::cout << "ERROR: Cannot open file " << filename << "! Aborting..." << std::endl;
     return false;
@@ -71,7 +68,7 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
      points.clear();
  }
 
- bool create2DMap(TwoDmap map2D,MAP_INT_MORTON_MULTI map_xy,MAP_INT_MORTON_MULTI map_z){
+ bool create2DMap(TwoDmap & map2D,MAP_INT_MORTON_MULTI map_xy,MAP_INT_MORTON_MULTI map_z){
      //get all the mortons-new cell, map.push_back
      list<int>::iterator itor = map2D.morton_list.begin();
          while(itor!=map2D.morton_list.end())
@@ -108,11 +105,11 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
                              slope->mean.y = xyz_centroid(1);
                              slope->mean.z = xyz_centroid(2);
                              (it->second)->countRoughNormal(slope->rough,slope->normal);
-                             cout<<slope->rough<<","<<slope->normal<<"\n------------------"<<endl;
+ //                             cout<<slope->rough<<","<<slope->normal<<"\n------------------"<<endl;
                          }
                      }
                      it++;
-                 }                 
+                 }
              }
              itor++;
          }
@@ -120,15 +117,16 @@ bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud
      return true;
  }
 
+
 int main(int argc, char **argv) {
     MAP_INT_MORTON_MULTI map_xy,map_z;
-    float gridLen = 4.0; //related with the robot's radius-changeable
+    float gridLen = 0.1; //related with the robot's radius-changeable
     TwoDmap map2D(gridLen);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
 
 
     ///read the point from the file
-   std::string cloud_path("src/oc_ndt/data/test.pcd");
+   std::string cloud_path("src/oc_ndt/data/fullSys.pcd"); //test-29 sample-4.5 table-2.8 sys-18
    OcNode  * wholeNode = new  OcNode();
    Vec3 min = Vec3(FLT_MAX,FLT_MAX,FLT_MAX),
           max = Vec3(-FLT_MAX,-FLT_MAX,-FLT_MAX);
@@ -138,6 +136,7 @@ int main(int argc, char **argv) {
 
    getBondingBox(cloud, min,max,wholeNode->lPoints); //get bounding box and initiate rootNode
    float len = map2D.getGridLen();
+   cout<<max.x-min.x<<endl;
   // int n = (int)ceil(float((max.x-min.x)/len));   //the whole nodes are divided into n*n*n
  //  float realLen = (max.x-min.x)/n;
 
@@ -174,5 +173,6 @@ int main(int argc, char **argv) {
 
    ///create 2D map from those discreted voxels
    create2DMap(map2D,map_xy,map_z);
+   map2D.showSlope();
    return 0;
 }

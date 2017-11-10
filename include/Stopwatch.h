@@ -4,7 +4,9 @@
 #include<string>
 #include <sstream>
 #include <cmath>
+#include "Vec3.h"
 using namespace std;
+
 
 string stringAndFloat(string a, float b){
     ostringstream oss;
@@ -107,16 +109,37 @@ int countMorton(int a,int b){
     return  res;
 }
 
-int countXYZ(int m,int z){
-    string mm = intToString(m);
-    string zz = intToString(z);
-    string result = mm+zz;
+int reverseToDec(char * reverse){
     stringstream ss;
-    ss<<result;
-    int res;
-    ss>>res;
+   ss<<reverse;
+   string str = ss.str();
+    string result(str.rbegin(),str.rend());
+    int res = binToDec(result);
     return res;
 }
+
+//count out column and line from morton_xy
+//for example
+//morton_xy    55
+//morton_xy    110111
+//return line 5: 0101 column 7:0111
+void mortonToXY(int & a, int &b, int morton){
+    string m = intToString(decToBinary(morton));
+    string reverse(m.rbegin(),m.rend());
+    int size = reverse.size()/2 ;
+    char * column = new char[size+1];
+    char * line= new char[size+1];
+    int j = 0;
+    for(int i=0;i<reverse.size();i+=2,j++){
+        column[j] = reverse[i];
+        line[j] = reverse[i+1];
+    }
+    column[size] = '\0';
+    line[size] = '\0';
+    a = reverseToDec(line);
+    b = reverseToDec(column);
+}
+
 
 #else
 
