@@ -11,8 +11,8 @@ class RobotSphere{
     float reachableHeight;//height that it can reach
 public:
 //    list<Slope *> trajectory;
-    RobotSphere(const float rr, Vec3 pos= Vec3(0,0,0), Vec3 goal=Vec3(1.3055,0.640172,-1.23853 )):r(rr),position(pos),goal(goal){
-        //0.0264822,0.012986,-0.105972
+    RobotSphere(const float rr, Vec3 pos= Vec3(1.02276,0.505226,1.67917/*2.75533,1.36108,1.67499*/),
+                Vec3 goal=Vec3(2.02865,1.00212,1.66626)):r(rr),position(pos),goal(goal){
     }
     float getRobotR() {return r;}
     float getR(){return r/ROBOT_TAKEUP_CELL;} //get cell radius
@@ -23,10 +23,10 @@ public:
         return reachableHeight;}
     float getRough(){
         //should be changed
-        return 100;
+        return 10000;
     }
     float getAngle(){
-        return 45;
+        return 60;
     }
 
     };

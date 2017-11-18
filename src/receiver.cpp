@@ -17,8 +17,11 @@
 #include <pcl/features/integral_image_normal.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/common/transforms.h>
-#include "map2D.h"
+//#include "map2D.h"
+//#include "AstarPlanar.h"
+#include "GlobalPlan.h"
 #include <vector>
+#include <fstream>
 using namespace Eigen;
 using namespace std;
 using namespace daysun;
@@ -27,7 +30,9 @@ typedef multimap<string,daysun::OcNode *>::iterator iterIntNode;
 
 RobotSphere robot(0.25); //radius--variable--according to the range of map
 daysun::TwoDmap map2D(robot.getR());
-ros::Publisher marker_pub,change_pub;
+ros::Publisher marker_pub,change_pub,markerArray_pub,marker_pub_bo,route_pub;
+
+//ofstream outfile("/home/daysun/testPoints.txt", ofstream::app);
 
 void uniformDivision( const pcl::PointXYZ temp,const float r,bool change){
     string morton_xy,morton_z;
@@ -84,6 +89,7 @@ void uniformDivision( const pcl::PointXYZ temp,const float r,bool change){
 void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
 {
     cout<<"receive ";
+    double time_start = stopwatch();
     pcl::PCLPointCloud2 pcl_pc2;
     pcl_conversions::toPCL(*my_msg,pcl_pc2);
     pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -92,19 +98,30 @@ void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
     map2D.setCloudFirst(Vec3(temp_cloud->points[0].x,temp_cloud->points[0].y,temp_cloud->points[0].z));
     for (int i=1;i<temp_cloud->points.size();i++)
     {
-//        cout<<temp_cloud->points[i].x<<","<<temp_cloud->points[i].y<<","<<temp_cloud->points[i].z<<endl;
+//        outfile<<temp_cloud->points[i].x<<","<<temp_cloud->points[i].y<<","<<temp_cloud->points[i].z<<endl;
         uniformDivision(temp_cloud->points[i],robot.getR(),false);
      }
-    cout<<"division done.\n";
+     double time_end = stopwatch();
+//    outfile.close();
+    cout<<"division done. Time cost: "<<(time_end-time_start)<<" s\n";
     cout<<"morton size: "<<map2D.morton_list.size()<<endl;
+     double time_start1 = stopwatch();
     map2D.create2DMap();
+     double time_end1 = stopwatch();
+     cout<<"2D Map creation done. Time cost: "<<(time_end1-time_start1)<<" s\n";
     if(marker_pub.getNumSubscribers()){
-        map2D.showInital(marker_pub,0,robot.getR());
-        cout<<"initial done\n";
-    }
-    cout<<"after subscriber\n";
+        map2D.showInital(marker_pub,robot,0);
+        map2D.showBottom(marker_pub_bo,robot.getR());
+        map2D.showInital(marker_pub,robot,0);
+        cout<<"initial show done\n";
+    }    
+
     Vec3 goal(robot.getGoal());
-    map2D.computeCost(goal,robot); //compute the cost map
+    map2D.computeCost(goal,robot,markerArray_pub); //compute the cost map
+
+    AstarPlanar globalPlanr(robot.getPosition(),robot.getGoal());
+    if(globalPlanr.findRoute(map2D,robot))
+        globalPlanr.showRoute(map2D,route_pub,robot.getR());
 }
 
 
@@ -124,7 +141,7 @@ void changeCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg){
      cout<<"change division done\n";
      cout<<"change morton size: "<<map2D.changeMorton_list.size()<<endl;
      map2D.change2DMap();
-     map2D.showInital(change_pub,1);
+     map2D.showInital(change_pub,robot,1);
 }
 
 
@@ -133,8 +150,11 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "fullSys_listener");
   ros::start();
   ros::NodeHandle n;
-  marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", INT_MAX);
-  change_pub = n.advertise<visualization_msgs::Marker>("change_marker", INT_MAX);
+  marker_pub = n.advertise<visualization_msgs::MarkerArray>("initial_marker_array", 0);
+  markerArray_pub = n.advertise<visualization_msgs::MarkerArray>("traversibility_marker_array", 0);
+  change_pub = n.advertise<visualization_msgs::MarkerArray>("change_marker_array", 0);
+  marker_pub_bo = n.advertise<visualization_msgs::MarkerArray>("bottom_marker_array", 0);
+  route_pub= n.advertise<visualization_msgs::MarkerArray>("route_marker_array", 0);
   ros::Subscriber sub = n.subscribe("publisher/cloud_fullSys", INT_MAX, chatterCallback); //initial 
   ros::Subscriber sub_change = n.subscribe("publisher/cloud_change", INT_MAX,changeCallback);//change
   ros::spin();

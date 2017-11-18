@@ -20,6 +20,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/console/parse.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 
 using namespace Eigen;
@@ -108,6 +109,8 @@ struct OcNode
                 normalVector = eigenvector.col(2);
             }
         }
+        if(roughness == 0) //for visualization
+            roughness = 0.01;
     }
 
 };
@@ -128,10 +131,12 @@ struct Slope{
     Vector3f normal; //Normal vector of the slope
     float rough;  //roughness of the slope
      Vec3 mean;  //mean value of the slope
-     float cost;
+     float h;
+     float g;
+     float f;  //f = g+h
      string morton_xy,morton_z;
      bool up, down; //false-empty true-full
-   // int index; //need??
+     Slope * father;
 };
 
 
@@ -237,24 +242,13 @@ class TwoDmap {
                   if(sit->second->up != true)
                 if((sit->second)->rough <= robot.getRough())
                     if(countAngle((sit->second)->normal,normal) <= robot.getAngle())
-                        if((abs(mtnZToNum((sit->second)->morton_z) - mtnZToNum(morton_z)) < (float)robot.getReachableHeight()/gridLen))
+                        if((abs(mtnZToNum((sit->second)->morton_z) - mtnZToNum(morton_z)) <= ceil((float)robot.getReachableHeight()/gridLen)))
                             list.push_back(sit->second);
                   sit++;
                 }
             }
-    }
+    }   
 
-    float TravelCost(Vec3 cur,Vec3 des,float goal = 0){
-        float cost = sqrt(pow(cur.x-des.x,2) + pow(cur.y-des.y,2));
-        if(goal != 0){
-            if(goal > cur.z){
-                des.z > cur.z ? cost=cost: cost += (cur.z-des.z)*0.3 ; //parameters should be changed
-            }else{
-                 des.z < cur.z ? cost=cost: cost += (des.z - cur.z)*0.3 ;
-            }
-        }
-          return cost;
-    }
     //true-collide, false-no collide
     bool CollisionCheck(Slope * slope,float r){
         if(slope->up == true)
@@ -285,23 +279,56 @@ class TwoDmap {
         return  an;
     }
 
+    bool isContainedQ(Slope * s,  list<Slope *> & Q){
+        list<Slope *>::iterator it = Q.begin();
+        while(it != Q.end()){
+            if(s->morton_xy.compare((*it)->morton_xy )==0 && s->morton_z.compare((*it)->morton_z )==0 )
+                return true;
+            it++;
+        }
+        return false;
+    }
+public:    
+    multimap<string,OcNode *>  map_xy,map_z; //ABCD+morton, UD+height---index
+    TwoDmap(const float res):gridLen(res){}
+    float getGridLen(){return gridLen;}
+    void setCloudFirst(Vec3 p){
+        cloudFirst = p;
+    }
+
+    list<string> morton_list; //xy-morton-all
+    list<string> changeMorton_list; //temp-change
+    map<string,Cell *> map_cell; //xy_morton, cell
+
     //find slope based on position
-    bool findSlope(Vec3 pos, Slope * p_slope,string & morton_xy,string & morton_z){
+  Slope *  findSlope(Vec3 pos, string & morton_xy,string & morton_z){
          transMortonXYZ(pos,morton_xy,morton_z);
-//         int zz =strToInt( morton_z.substr(1,morton_z.length()-1));
          map<string,Cell *>::iterator it = map_cell.find(morton_xy);
+         Slope * p = NULL;
          if(it != map_cell.end()){
              map<string,Slope *,CmpByKeyUD>::iterator ss = (it->second)->map_slope.find(morton_z);
              if(ss != (it->second)->map_slope.end()){
-                 p_slope = ss->second;
-                 return true;
+                 return ss->second;
              }
          }
-         return false;
     }
+
+  //for now-- no consideration for the height of destination
+  float TravelCost(Vec3 cur,Vec3 des,float goal = 0){
+      float cost = sqrt(pow(cur.x-des.x,2) + pow(cur.y-des.y,2));
+//        if(goal != 0){
+//            if(goal > cur.z){
+//                des.z > cur.z ? cost=cost: cost += (cur.z-des.z)*0.3 ; //parameters should be changed
+//            }else{
+//                 des.z < cur.z ? cost=cost: cost += (des.z - cur.z)*0.3 ;
+//            }
+//        }
+        return cost;
+  }
 
     //find the reachable surrounding slopes
      list<Slope *>  AccessibleNeighbors(Slope * slope,RobotSphere & robot){
+//         cout<<"access slope: "<<slope->morton_xy<<","<<slope->morton_z<<endl;
          list<Slope *> list;
          string morton_xy = slope->morton_xy;
          string morton_z= slope->morton_z;
@@ -319,21 +346,9 @@ class TwoDmap {
          return list;
      }
 
-public:    
-    multimap<string,OcNode *>  map_xy,map_z; //ABCD+morton, UD+height---index
-    TwoDmap(const float res):gridLen(res){}
-    float getGridLen(){return gridLen;}
-    void setCloudFirst(Vec3 p){
-        cloudFirst = p;
-    }
-
-    list<string> morton_list; //xy-morton-all
-    list<string> changeMorton_list; //temp-change
-    map<string,Cell *> map_cell; //xy_morton, cell
-
     //inital    
     bool create2DMap(){
-        cout<<"start create 2D map\n";
+//        cout<<"start create 2D map\n";
         //get all the mortons-new cell, map.push_back
         list<string>::iterator itor = morton_list.begin();
             while(itor!=morton_list.end())
@@ -380,7 +395,8 @@ public:
                                 slope->morton_xy = (it->second)->morton;
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
-                                slope->cost = FLT_MAX;
+                                slope->h = slope->g = slope->f = FLT_MAX;
+                                slope->father = NULL;
                                 (it->second)->countRoughNormal(slope->rough,slope->normal);
                             }
                         }
@@ -388,29 +404,169 @@ public:
                     }
                 }
                 itor++;
-            }
-        cout<<"create 2D map done.\n";
+            }        
         return true;
     }
 
-    //for visualization-initial
-    void showInital(ros::Publisher marker_pub,int color =0,float radius=0.5){ //0-,1-change
+    //for visualization
+    void countPositionXYZ(float & x,float &y,float &z,string s_xy,string s_z){
+        string belongxy = s_xy.substr(0,1);
+        string belongz = s_z.substr(0,1);
+         int mortonxy = strToInt( s_xy.substr(1,s_xy.length()-1));
+         int mortonz = strToInt( s_z.substr(1,s_z.length()-1));
+         int a,b;
+         mortonToXY(a,b,mortonxy);
+         if(belongxy.compare("A") == 0){
+             x = (a-0.5)*gridLen + cloudFirst.x;
+             y = (b-0.5)*gridLen + cloudFirst.y;
+         }
+         if(belongxy.compare("B") == 0){
+             x = (a-0.5)*gridLen + cloudFirst.x;
+             y = cloudFirst.y - (b-0.5)*gridLen ;
+         }
+         if(belongxy.compare("C") == 0){
+             x = cloudFirst.x- (a-0.5)*gridLen ;
+             y = (b-0.5)*gridLen + cloudFirst.y;
+         }
+         if(belongxy.compare("D") == 0){
+             x = cloudFirst.x- (a-0.5)*gridLen ;
+             y = cloudFirst.y - (b-0.5)*gridLen ;
+         }
+         if(belongz.compare("U") == 0){
+             z = cloudFirst.z + (mortonz-0.5)*gridLen;
+         }
+         else if(belongz.compare("D") == 0){
+             z = cloudFirst.z - (mortonz-0.5)*gridLen;
+         }
+    }
+
+    //for visualiation
+    void showSlopeList(ros::Publisher marker_pub,list<Slope *> & closed,float radius,int color =0){
         ros::Rate r(50);
         uint32_t shape = visualization_msgs::Marker::CUBE; //SPHERE ARROW CYLINDER
+        visualization_msgs::MarkerArray mArray;
         int i = 0;
+//        cout<<closed.size()<<endl;
+        list<Slope *>::iterator it = closed.begin();
+        while(it != closed.end()){
+            Vector3f normal = (*it)->normal;
+//            Vec3 mean = (*it)->mean;
+            float rough = (*it)->rough;
+            float x,y,z;
+            string s_xy = (*it)->morton_xy;
+            string s_z = (*it)->morton_z;
+            countPositionXYZ(x,y,z,s_xy,s_z);
+                    visualization_msgs::Marker m_s;
+                    m_s.ns  = "traversibility";
+                    m_s.header.frame_id = "/my_frame";
+                    m_s.header.stamp = ros::Time::now();
+                    m_s.id = i;
+                    m_s.type = shape;
+                    m_s.action = visualization_msgs::Marker::ADD;
+                    m_s.pose.position.x = x;
+                    m_s.pose.position.y = y;
+                    m_s.pose.position.z = z;
+                    m_s.pose.orientation.x = normal(0);
+                    m_s.pose.orientation.y = normal(1);
+                    m_s.pose.orientation.z = normal(2);
+                    m_s.pose.orientation.w = 1.0;
+                    m_s.scale.x = radius;
+                    m_s.scale.y = radius;
+                    m_s.scale.z = 2.5* rough; //not using the rough, for visualization
+                    if(color == 0){ //traversibility
+                        m_s.color.a = 1.0;
+                        m_s.color.b = 1.0;
+                        m_s.color.r = 0.5;
+                    }
+                    else if(color == 1){ //not traversible
+                        m_s.color.a = 1.0;
+                        m_s.color.b = 0.5;
+                        m_s.color.r = 1;
+                    }
+                    else if(color == 2){ //for bottom_cell
+                        m_s.color.a = 1.0;
+                        m_s.color.r = 0.5;
+                        m_s.color.g = 0.2;
+                    }else if(color == 4){ //for route
+                        m_s.color.a = 1.0;
+                        m_s.color.b= 0.5;
+                        m_s.color.r = 0.5;
+                        m_s.color.g = 0.5;
+                        m_s.scale.z = radius;
+                    }
+                    m_s.lifetime = ros::Duration();
+                    mArray.markers.push_back(m_s);
+            it++;i++;
+            }
+        if(ros::ok()){
+            if (marker_pub.getNumSubscribers() == 1){
+                marker_pub.publish(mArray);
+                ros::spinOnce();
+                   r.sleep();
+            }
+        }
+    }
+
+    //for visualization-initial
+    void showInital(ros::Publisher marker_pub,RobotSphere & robot,int color =0){ //0-,1-change
+        float radius=robot.getR();
+        ros::Rate r(50);
+        uint32_t shape = visualization_msgs::Marker::CUBE; //SPHERE ARROW CYLINDER
+         visualization_msgs::MarkerArray mArray;
+        int i = 2;
         if (ros::ok()){
-            //for every cell
+            //1-for start and goal
+            {
+            list<Vec3> lv ;
+            lv.push_back(robot.getGoal());
+            lv.push_back(robot.getPosition());
+            list<Vec3>::iterator ilv = lv.begin();
+            int j = 0;
+            while(ilv != lv.end()){
+                string m_xy,m_z;
+                float x,y,z;
+                transMortonXYZ(*ilv,m_xy,m_z);
+                countPositionXYZ(x,y,z,m_xy,m_z);
+                visualization_msgs::Marker m_s;
+                m_s.ns  = "basic_shapes";
+                m_s.header.frame_id = "/my_frame";
+                m_s.header.stamp = ros::Time::now();
+                m_s.id = j;
+                m_s.type = shape;
+                m_s.action = visualization_msgs::Marker::ADD;
+                m_s.pose.position.x = x;
+                m_s.pose.position.y = y;
+                m_s.pose.position.z = z;
+                m_s.scale.x = radius; //the same as radius
+                m_s.scale.y = radius;
+                m_s.scale.z = radius;
+                m_s.pose.orientation.x = 0;
+                m_s.pose.orientation.y = 0;
+                m_s.pose.orientation.z = 0;
+                m_s.pose.orientation.w = 1.0;
+                m_s.color.a = 1.0;
+                m_s.color.r = 0.5;
+                m_s.color.g = 0.5;
+                m_s.lifetime = ros::Duration();
+                mArray.markers.push_back(m_s);
+                ilv++;j++;
+            }
+            }
+            //2-for every cell
                     if(map_cell.size() != 0){
                     map<string,Cell*>::iterator cell_iter= map_cell.begin();
                     while(cell_iter != map_cell.end()){
-                         Cell * cell = cell_iter->second;
+                         Cell * cell = cell_iter->second;                         
                         //for every slope
                          map<string,Slope *,CmpByKeyUD>::iterator slItor = cell->map_slope.begin();
                          while(slItor != cell->map_slope.end()){
                              i++;
                             Vector3f normal = (slItor->second)->normal;
-                            Vec3 mean = (slItor->second)->mean;
                             float rough = (slItor->second)->rough;
+                            float x,y,z;
+                            string s_xy = (slItor->second)->morton_xy;
+                            string s_z = (slItor->second)->morton_z;
+                            countPositionXYZ(x,y,z,s_xy,s_z);
                             //add marker
                             visualization_msgs::Marker marker;
                             marker.ns = "basic_shapes";
@@ -419,10 +575,9 @@ public:
                             marker.id = i; //same namespace and id will overwrite the old one
                             marker.type = shape;
                             marker.action = visualization_msgs::Marker::ADD;
-                            // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
-                            marker.pose.position.x = mean.x;
-                            marker.pose.position.y = mean.y;
-                            marker.pose.position.z = mean.z;
+                            marker.pose.position.x = x;
+                            marker.pose.position.y = y;
+                            marker.pose.position.z = z;
                             marker.pose.orientation.x = normal(0);
                             marker.pose.orientation.y = normal(1);
                             marker.pose.orientation.z = normal(2);
@@ -435,20 +590,70 @@ public:
                             if(color == 1){
                                 //for testing change
                                 marker.color.g =0.5;
+                                marker.color.b =1;
                             }
                             marker.lifetime = ros::Duration();
-                            if (marker_pub.getNumSubscribers() == 1){
-                                marker_pub.publish(marker);
-                                ros::spinOnce();
-                                   r.sleep();
-//                                    cout<<"publish "<<i<<"\t";
-                            }
+                            mArray.markers.push_back(marker);
                              slItor++;
                          }
                         cell_iter++;
                     }
           }
+                    if (marker_pub.getNumSubscribers() == 1){
+                        marker_pub.publish(mArray);
+                        ros::spinOnce();
+                           r.sleep();
+                    }
     }
+    }
+
+    //for visualization
+    void showBottom(ros::Publisher marker_pub,float radius){
+        ros::Rate r(50);
+        uint32_t shape = visualization_msgs::Marker::CUBE; //SPHERE ARROW CYLINDER
+        visualization_msgs::MarkerArray mArray;
+        int i =0;
+        map<string,Cell *>::iterator it = map_cell.begin();
+        while(it != map_cell.end()){
+            Cell * cell = it->second;
+            Vector3f normal ;
+            normal<<0,0,1;
+            float rough = 0.1;
+            float x,y,z;
+            string s_xy = cell->getMorton();
+            string s_z = "U1";
+            countPositionXYZ(x,y,z,s_xy,s_z);
+                    visualization_msgs::Marker m_s;
+                    m_s.ns  = "bottom";
+                    m_s.header.frame_id = "/my_frame";
+                    m_s.header.stamp = ros::Time::now();
+                    m_s.id = i;
+                    m_s.type = shape;
+                    m_s.action = visualization_msgs::Marker::ADD;
+                    m_s.pose.position.x = x;
+                    m_s.pose.position.y = y;
+                    m_s.pose.position.z = z;
+                    m_s.pose.orientation.x = normal(0);
+                    m_s.pose.orientation.y = normal(1);
+                    m_s.pose.orientation.z = normal(2);
+                    m_s.pose.orientation.w = 1.0;
+                    m_s.scale.x = radius;
+                    m_s.scale.y = radius;
+                    m_s.scale.z = 1.5* rough; //not using the rough, for visualization
+                        m_s.color.a = 1.0;
+                        m_s.color.r = 0.5;
+                        m_s.color.g = 0.2;
+                    m_s.lifetime = ros::Duration();
+                    mArray.markers.push_back(m_s);
+            it++; i++;
+        }
+        if(ros::ok()){
+            if (marker_pub.getNumSubscribers() == 1){
+                marker_pub.publish(mArray);
+                ros::spinOnce();
+                   r.sleep();
+            }
+        }
     }
 
     //tranform position into morton_xy and morton_z
@@ -528,6 +733,8 @@ public:
                                 slope->morton_xy = (it->second)->morton;
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
+//                                 slope->father = NULL;
+//                                slope->h = slope->g = slope->f = FLT_MAX;
                                 (it->second)->countRoughNormal(slope->rough,slope->normal);
                             }
                         }
@@ -590,6 +797,8 @@ public:
                             slope->morton_xy = (it->second)->morton;
                             slope->morton_z= (it->second)->z;
                             slope->up = up,slope->down = down;
+//                             slope->father = NULL;
+//                            slope->h = slope->g = slope->f = FLT_MAX;
                             (it->second)->countRoughNormal(slope->rough,slope->normal);
                         }
                     }
@@ -602,38 +811,69 @@ public:
             return true;
     }
 
-    void computeCost(Vec3 goal,RobotSphere & robot){
+    void computeCost(Vec3 goal,RobotSphere & robot,ros::Publisher marker_pub){
+        double time_start2 = stopwatch();
          list<Slope *> Q; //list of cell to be computed
+         list<Slope *> closed;//no checking again
+         list<Slope *> traversability; //can travel
          string morton_xy,morton_z;
          transMortonXYZ(goal,morton_xy,morton_z);
          map<string,Cell *>::iterator it = map_cell.find(morton_xy);
          if(it != map_cell.end()){
              map<string,Slope *,CmpByKeyUD>::iterator ss = (it->second)->map_slope.find(morton_z);
              if(ss != (it->second)->map_slope.end()){
-                 ss->second->cost = 0; //goal.cost = 0
+                 ss->second->h = 0; //goal.h = 0
                  Q.push_back( ss->second);
+//                 cout<<"find start\n";
              }else{
                  cout<<"Goal position wrong: cant find goal slope.\n";
                  return ;
              }
          }
+
          //compute the surrounding morton code
          while(Q.size() != 0){
-             if(!CollisionCheck(Q.front(),robot.getRobotR() )){
+             if(!CollisionCheck(Q.front(),robot.getRobotR() )){              
                  //no collision
                  list<Slope *> neiSlope = AccessibleNeighbors(Q.front(),robot);
                  list<Slope *>::iterator itN = neiSlope.begin();
                  while(itN != neiSlope.end()){
-                     if((*itN)->cost > Q.front()->cost /*+ TravelCost(Q.front()->mean,(*itN)->mean),goal.z*/){
-                         (*itN)->cost = Q.front()->cost + TravelCost(Q.front()->mean,(*itN)->mean,goal.z);
-                         Q.push_back(*itN);
+                     if((*itN)->up == true){
+                         (*itN)->h = FLT_MAX;
+                         closed.push_back(*itN);
+                     }                     
+                     else{
+                         Vec3 q,itn;
+                         string s_xy = Q.front()->morton_xy;
+                         string s_z = Q.front()->morton_z;
+                         countPositionXYZ(q.x,q.y,q.z,s_xy,s_z);
+                         string n_xy = (*itN)->morton_xy;
+                         string n_z = (*itN)->morton_z;
+                         countPositionXYZ(itn.x,itn.y,itn.z,n_xy,n_z);
+
+                         if((*itN)->h > Q.front()->h + TravelCost(q,itn,goal.z)){
+                         (*itN)->h = Q.front()->h + TravelCost(q,itn,goal.z);
+                         if(!isContainedQ(*itN,Q) && !isContainedQ(*itN,closed) && !isContainedQ(*itN,traversability)){
+                             Q.push_back(*itN);
+                         }
+                     }
                      }
                      itN++;
                  }
+                 traversability.push_back(Q.front());
+             }else{
+                 Q.front()->h = FLT_MAX; //collide
+                 closed.push_back(Q.front());
              }
              Q.pop_front();
          }
-         cout<<"compute done.\n";
+         double time_end2 = stopwatch();
+         cout<<"Compute costmap done. Time cost: "<<(time_end2-time_start2)<<" s\n";
+         if(marker_pub.getNumSubscribers()){
+             showSlopeList(marker_pub,traversability,robot.getR(),0);
+//             showSlopeList(marker_pub,closed,robot.getR(),1); //for test
+             cout<<"costmap show done\n";
+         }
     }
 
 };
