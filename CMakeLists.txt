@@ -35,6 +35,15 @@ ELSE()
         ENDIF()
 ENDIF()
 
+#openmp
+FIND_PACKAGE( OpenMP REQUIRED)
+if(OPENMP_FOUND)
+message("OPENMP FOUND")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 catkin_package(
   DEPENDS sensor_msgs tf  message_runtime geometry_msgs std_msgs)
 
@@ -61,12 +70,6 @@ add_executable(publishChangePoint
 target_link_libraries(publishChangePoint
 ${PCL_LIBRARIES} )
 
-#publish change
-add_executable(testCU
- src/test/test_c_u.cpp)
-target_link_libraries(testCU
-${PCL_LIBRARIES} )
-
 #receive the point and pocess the data
 add_executable(receivePoint
      include/Stopwatch.h
@@ -89,19 +92,11 @@ ${PCL_LIBRARIES}
 #${PCL_LIBRARIES}
 #${OpenCV_LIBS} )
 
-add_executable(test_small
- src/test/test_write_pcl.cpp)
-target_link_libraries(test_small
-${PCL_LIBRARIES})
 
-#add_executable(octreeDivision
-#     include/Stopwatch.h
-#      include/Vec2.h
-#     include/Vec3.h
-# src/octreeDivision.cpp)
-#target_link_libraries(octreeDivision
-#${PCL_LIBRARIES}
-#${OpenCV_LIBS} )
+add_executable(test_mine
+ src/test/testopebmp.cpp)
+target_link_libraries(test_mine
+ )
 
 #install(TARGETS ${PROJECT_NAME}
 #  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})

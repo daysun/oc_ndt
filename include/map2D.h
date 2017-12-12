@@ -555,18 +555,18 @@ public:
             //2-for every cell
                     if(map_cell.size() != 0){
                     map<string,Cell*>::iterator cell_iter= map_cell.begin();
-                    while(cell_iter != map_cell.end()){
-                         Cell * cell = cell_iter->second;                         
+                    while(cell_iter != map_cell.end()){                       
+                         Cell * cell = cell_iter->second;
                         //for every slope
-                         map<string,Slope *,CmpByKeyUD>::iterator slItor = cell->map_slope.begin();
+                         map<string,Slope *,CmpByKeyUD>::iterator slItor = cell->map_slope.begin();                        
                          while(slItor != cell->map_slope.end()){
                              i++;
-                            Vector3f normal = (slItor->second)->normal;
+                            Vector3f normal = (slItor->second)->normal;                          
                             float rough = (slItor->second)->rough;
                             float x,y,z;
                             string s_xy = (slItor->second)->morton_xy;
-                            string s_z = (slItor->second)->morton_z;
-                            countPositionXYZ(x,y,z,s_xy,s_z);
+                            string s_z = (slItor->second)->morton_z;                      
+                            countPositionXYZ(x,y,z,s_xy,s_z);                           
                             //add marker
                             visualization_msgs::Marker marker;
                             marker.ns = "basic_shapes";
@@ -584,19 +584,19 @@ public:
                             marker.pose.orientation.w = 1.0;
                             marker.scale.x = radius; //the same as radius
                             marker.scale.y = radius;
-                            marker.scale.z = rough;
+                            marker.scale.z = 0.05/*rough*/;
                             marker.color.a = 1.0;
-                            marker.color.r = 0.5;
+                            marker.color.r = 0.5;                            
                             if(color == 1){
                                 //for testing change
                                 marker.color.g =0.5;
                                 marker.color.b =1;
                             }
-                            marker.lifetime = ros::Duration();
+                            marker.lifetime = ros::Duration();                            
                             mArray.markers.push_back(marker);
                              slItor++;
                          }
-                        cell_iter++;
+                        cell_iter++;                        
                     }
           }
                     if (marker_pub.getNumSubscribers() == 1){
@@ -639,7 +639,7 @@ public:
                     m_s.pose.orientation.w = 1.0;
                     m_s.scale.x = radius;
                     m_s.scale.y = radius;
-                    m_s.scale.z = 1.5* rough; //not using the rough, for visualization
+                    m_s.scale.z = 0.2/*1.5* rough*/; //not using the rough, for visualization
                         m_s.color.a = 1.0;
                         m_s.color.r = 0.5;
                         m_s.color.g = 0.2;
@@ -811,6 +811,7 @@ public:
             return true;
     }
 
+    //compute cost map
     void computeCost(Vec3 goal,RobotSphere & robot,ros::Publisher marker_pub){
         double time_start2 = stopwatch();
          list<Slope *> Q; //list of cell to be computed

@@ -22,6 +22,7 @@
 #include "GlobalPlan.h"
 #include <vector>
 #include <fstream>
+#include"omp.h"
 using namespace Eigen;
 using namespace std;
 using namespace daysun;
@@ -29,16 +30,16 @@ typedef multimap<string,daysun::OcNode *>  MAP_INT_MORTON_MULTI;
 typedef multimap<string,daysun::OcNode *>::iterator iterIntNode;
 
 RobotSphere robot(0.25); //radius--variable--according to the range of map
+//test-0.25, sys-0.125
 daysun::TwoDmap map2D(robot.getR());
 ros::Publisher marker_pub,change_pub,markerArray_pub,marker_pub_bo,route_pub;
 
-//ofstream outfile("/home/daysun/testPoints.txt", ofstream::app);
+//ofstream outfile("/home/daysun/testPointsSys.txt", ofstream::app);
 
 void uniformDivision( const pcl::PointXYZ temp,const float r,bool change){
     string morton_xy,morton_z;
     Vec3 temp3(temp.x,temp.y,temp.z);
     map2D.transMortonXYZ(temp3,morton_xy,morton_z);
-//     cout<<morton_xy<<","<<morton_z<<endl;
     //for change-record which xy have been changed
     if(change){
         if(map2D.changeMorton_list.size() != 0){
@@ -88,7 +89,7 @@ void uniformDivision( const pcl::PointXYZ temp,const float r,bool change){
 
 void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
 {
-    cout<<"receive ";
+    cout<<"receive initial\n";
     double time_start = stopwatch();
     pcl::PCLPointCloud2 pcl_pc2;
     pcl_conversions::toPCL(*my_msg,pcl_pc2);
@@ -96,6 +97,8 @@ void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
     pcl::fromPCLPointCloud2(pcl_pc2,*temp_cloud);
     cout<<temp_cloud->points.size()<<endl;
     map2D.setCloudFirst(Vec3(temp_cloud->points[0].x,temp_cloud->points[0].y,temp_cloud->points[0].z));
+
+#pragma omp parallel for
     for (int i=1;i<temp_cloud->points.size();i++)
     {
 //        outfile<<temp_cloud->points[i].x<<","<<temp_cloud->points[i].y<<","<<temp_cloud->points[i].z<<endl;
@@ -112,7 +115,6 @@ void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
     if(marker_pub.getNumSubscribers()){
         map2D.showInital(marker_pub,robot,0);
         map2D.showBottom(marker_pub_bo,robot.getR());
-        map2D.showInital(marker_pub,robot,0);
         cout<<"initial show done\n";
     }    
 
@@ -150,13 +152,13 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "fullSys_listener");
   ros::start();
   ros::NodeHandle n;
-  marker_pub = n.advertise<visualization_msgs::MarkerArray>("initial_marker_array", 0);
-  markerArray_pub = n.advertise<visualization_msgs::MarkerArray>("traversibility_marker_array", 0);
-  change_pub = n.advertise<visualization_msgs::MarkerArray>("change_marker_array", 0);
-  marker_pub_bo = n.advertise<visualization_msgs::MarkerArray>("bottom_marker_array", 0);
-  route_pub= n.advertise<visualization_msgs::MarkerArray>("route_marker_array", 0);
-  ros::Subscriber sub = n.subscribe("publisher/cloud_fullSys", INT_MAX, chatterCallback); //initial 
-  ros::Subscriber sub_change = n.subscribe("publisher/cloud_change", INT_MAX,changeCallback);//change
+  marker_pub = n.advertise<visualization_msgs::MarkerArray>("initial_marker_array", 1000);
+  markerArray_pub = n.advertise<visualization_msgs::MarkerArray>("traversibility_marker_array", 1000);
+  change_pub = n.advertise<visualization_msgs::MarkerArray>("change_marker_array", 1000);
+  marker_pub_bo = n.advertise<visualization_msgs::MarkerArray>("bottom_marker_array", 1000);
+  route_pub= n.advertise<visualization_msgs::MarkerArray>("route_marker_array", 1000);
+  ros::Subscriber sub = n.subscribe("publisher/cloud_fullSys", 1000, chatterCallback); //initial
+  ros::Subscriber sub_change = n.subscribe("publisher/cloud_change", 1000,changeCallback);//change
   ros::spin();
   ros::shutdown();
   return 0;

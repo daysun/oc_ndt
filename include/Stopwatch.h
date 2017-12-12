@@ -22,7 +22,7 @@ double stopwatch()
 }
 
 int decToBinary(int k){
-    int s[10],rem,i=0,t=0;
+    int s[20],rem,i=0,t=0;
     do{
         rem = k%2;
         k= k/2;
@@ -125,6 +125,10 @@ int reverseToDec(char * reverse){
 //return line 5: 0101 column 7:0111
 void mortonToXY(int & a, int &b, int morton){
     string m = intToString(decToBinary(morton));
+    //add '0'
+    if(m.size()/2 != 0){
+        m.insert(0,"0");
+    }
     string reverse(m.rbegin(),m.rend());
     int size = reverse.size()/2 ;
     char * column = new char[size+1];
