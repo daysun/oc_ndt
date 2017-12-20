@@ -7,7 +7,9 @@
 #include <sstream>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/statistical_outlier_removal.h>
+#include <iostream>
 #include <limits.h>
+using namespace std;
 
 bool loadCloud(std::string &filename,pcl::PointCloud<pcl::PointXYZ>::Ptr & cloud)
 {
@@ -36,9 +38,10 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "publisher");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<sensor_msgs::PointCloud2>("publisher/cloud_fullSys", INT_MAX);
+  ros::Publisher chatter_pub = n.advertise<sensor_msgs::PointCloud2>("publisher/cloud_fullSys", 1000);
    sensor_msgs::PointCloud2 output;
-   std::string cloud_path("src/oc_ndt/data/test.pcd"); //test-29 sample-4.5 table-2.8 sys-18
+//   std::string cloud_path("src/oc_ndt/data/test.pcd"); //test-29 sample-4.5 table-2.8 sys-18
+   std::string cloud_path("/home/daysun/rros/src/oc_ndt/data/fullSys.pcd");
    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
 
    if (!loadCloud(cloud_path,cloud))
@@ -46,8 +49,13 @@ int main(int argc, char **argv)
 
    pcl::toROSMsg(*cloud,output);
 
+   ros::Rate r(30);
+   if(ros::ok())
        if(chatter_pub.getNumSubscribers() == 1) {
             chatter_pub.publish(output);
+            cout<<"send out\n";
+            ros::spinOnce();
+            r.sleep();
        }
   return 0;
 }

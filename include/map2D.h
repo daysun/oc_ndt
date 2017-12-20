@@ -26,14 +26,15 @@
 using namespace Eigen;
 using namespace std;
 
-#define MINPOINTSIZE 4
+#define MINPOINTSIZE 3
 
 namespace daysun{
 //new one - ABCD UD
 struct OcNode
 {
 //    Vec3 min,max;
-    std::list<pcl::PointXYZ> lPoints;
+    std::list<pcl::PointXYZ> lPoints;//to be add
+    std::list<pcl::PointXYZ> lDelPoints;//to be delete
     Eigen::Matrix3f covariance_matrix; //C
     Eigen::Vector3f xyz_centroid; //mean
     int N; //number of points which has been droped(mean having been calculated )
@@ -54,6 +55,8 @@ struct OcNode
     }
 
     bool isSlope(multimap<string,OcNode *> map_xy,bool & up, bool & down){
+        if(N<MINPOINTSIZE)
+            return false;
         int currentZ = strToInt( z.substr(1,z.length()-1)); // this node
         string belong = z.substr(0,1);
         string zadd = stringAndFloat(belong,(currentZ +1));
@@ -143,7 +146,7 @@ struct Slope{
 class Cell{
     string morton;
 public:
-    map<string,Slope *,CmpByKeyUD> map_slope;
+    map<string,Slope *,CmpByKeyUD> map_slope; //z, slope
     Cell(const string morton):morton(morton){}    
     string getMorton(){return morton;}
 
@@ -289,7 +292,7 @@ class TwoDmap {
         return false;
     }
 public:    
-    multimap<string,OcNode *>  map_xy,map_z; //ABCD+morton, UD+height---index
+    multimap<string,OcNode *>  map_xy/*,map_z*/; //ABCD+morton, UD+height---index
     TwoDmap(const float res):gridLen(res){}
     float getGridLen(){return gridLen;}
     void setCloudFirst(Vec3 p){
@@ -298,6 +301,7 @@ public:
 
     list<string> morton_list; //xy-morton-all
     list<string> changeMorton_list; //temp-change
+    list<string> delMorton_list;//temp-delete
     map<string,Cell *> map_cell; //xy_morton, cell
 
     //find slope based on position
@@ -348,7 +352,6 @@ public:
 
     //inital    
     bool create2DMap(){
-//        cout<<"start create 2D map\n";
         //get all the mortons-new cell, map.push_back
         list<string>::iterator itor = morton_list.begin();
             while(itor!=morton_list.end())
@@ -380,7 +383,7 @@ public:
                             pcl::computeCovarianceMatrix(*point_cloud_ptr,xyz_centroid,covariance_matrix);
                             (it->second)->xyz_centroid <<xyz_centroid(0),xyz_centroid(1),xyz_centroid(2);
                             (it->second)->covariance_matrix = covariance_matrix;
-                              (it->second)->N += (it->second)->lPoints.size(); //record the num counting mean and C                         
+                            (it->second)->N += (it->second)->lPoints.size(); //record the num counting mean and C
                             (it->second)->lPoints.clear();
                             // if this node's up-down neighbors are free
                             //--- store in the slope  (count roughness and Normal vector, (new slope, cell.push_back)
@@ -396,16 +399,276 @@ public:
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
                                 slope->h = slope->g = slope->f = FLT_MAX;
+                                slope->father = NULL;//for path plan
+                                (it->second)->countRoughNormal(slope->rough,slope->normal);
+                            }
+                        }
+                        it++;
+                    }// else while end
+                }//else end
+                itor++;
+            }//while end
+        return true;
+    }
+
+    // change-add map
+    bool change2DMap(){
+        cout<<"start change 2D map\n";
+        if(changeMorton_list.size() == 0)
+            return false;
+        list<string>::iterator itor = changeMorton_list.begin();
+        while(itor != changeMorton_list.end()){
+            //find if it's contained in cell_morton_list
+            if(map_cell.size() == 0)
+                return false;
+            string changeMorton = *itor;
+            map<string,Cell *>::iterator map_it= map_cell.find(changeMorton);
+            if(map_it == map_cell.end()) {
+                //not find 1
+                //create a new cell- the same as the initial
+                Cell * cell = new Cell(*itor);
+                map_cell.insert(map<string,Cell*>::value_type(cell->getMorton(), cell));
+                if(map_xy.count(*itor) == 0){
+                    cout<<"wrong\n";
+                    return false;
+                }else{
+                    multimap<string,daysun::OcNode *>::iterator  it = map_xy.find(*itor);
+                    while(it != map_xy.end()){
+                        if((it->first).compare(*itor) != 0)
+                            break;
+                        if((it->second)->lPoints.size() >= MINPOINTSIZE){
+                            pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
+                            std::list<pcl::PointXYZ>::iterator node_iter = (it->second)->lPoints.begin();
+                            while(node_iter != (it->second)->lPoints.end()){
+                                 point_cloud_ptr->points.push_back (*node_iter);
+                                 node_iter++;
+                            }
+                            Eigen::Matrix3f covariance_matrix; //C
+                            Eigen::Vector4f xyz_centroid; //mean
+                            pcl::compute3DCentroid(*point_cloud_ptr,xyz_centroid);
+                            pcl::computeCovarianceMatrix(*point_cloud_ptr,xyz_centroid,covariance_matrix);
+                            (it->second)->xyz_centroid << xyz_centroid(0),xyz_centroid(1),xyz_centroid(2);
+                            (it->second)->covariance_matrix = covariance_matrix;
+                            (it->second)->N += (it->second)->lPoints.size();
+                            (it->second)->lPoints.clear();
+                            bool up= false, down = false;
+                            if((it->second)->isSlope(map_xy,up,down) ){
+                                Slope * slope = new Slope();
+                                cell->map_slope.insert(make_pair((it->second)->z,slope));
+                                slope->mean.x = xyz_centroid(0);
+                                slope->mean.y = xyz_centroid(1);
+                                slope->mean.z = xyz_centroid(2);
+                                slope->morton_xy = (it->second)->morton;
+                                slope->morton_z= (it->second)->z;
+                                slope->up = up,slope->down = down;
                                 slope->father = NULL;
+                                slope->h = slope->g = slope->f = FLT_MAX;
                                 (it->second)->countRoughNormal(slope->rough,slope->normal);
                             }
                         }
                         it++;
                     }
                 }
-                itor++;
-            }        
-        return true;
+            }else{
+                //find 1-handle the exsit cell-update it
+                Cell * cell = map_it->second; //get the exist cell
+                multimap<string,daysun::OcNode *>::iterator  it = map_xy.find(changeMorton);
+                //for each node morton_xy==target
+                while(it != map_xy.end()){
+                    if((it->first).compare(changeMorton) != 0)
+                        break;
+                    if((it->second)->lPoints.size() >= MINPOINTSIZE){
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
+                        std::list<pcl::PointXYZ>::iterator node_iter = (it->second)->lPoints.begin();
+                        while(node_iter != (it->second)->lPoints.end()){
+                             point_cloud_ptr->points.push_back (*node_iter);
+                             node_iter++;
+                        }
+                        if((Eigen::Matrix3f::Zero(3,3) == (it->second)->covariance_matrix )
+                                && (Eigen::Vector3f::Zero()==  (it->second)->xyz_centroid)){
+                            //not existed--new node
+                            Eigen::Matrix3f covariance_matrix; //C
+                            Eigen::Vector4f xyz_centroid; //mean
+                            pcl::compute3DCentroid(*point_cloud_ptr,xyz_centroid);
+                            pcl::computeCovarianceMatrix(*point_cloud_ptr,xyz_centroid,covariance_matrix);
+                            (it->second)->xyz_centroid <<xyz_centroid(0),xyz_centroid(1),xyz_centroid(2);
+                            (it->second)->covariance_matrix = covariance_matrix;
+                            (it->second)->N += (it->second)->lPoints.size();
+                            (it->second)->lPoints.clear();
+                            //new Slope
+                            bool up= false, down = false;
+                            if((it->second)->isSlope(map_xy,up,down)){
+                                Slope * slope = new Slope();
+                                cell->map_slope.insert(make_pair((it->second)->z,slope));
+                                slope->mean.x = (it->second)->xyz_centroid(0);
+                                slope->mean.y = (it->second)->xyz_centroid(1);
+                                slope->mean.z = (it->second)->xyz_centroid(2);
+                                slope->morton_xy = (it->second)->morton;
+                                slope->morton_z= (it->second)->z;
+                                slope->up = up,slope->down = down;
+                                slope->father = NULL;
+                                slope->h = slope->g = slope->f = FLT_MAX;
+                                (it->second)->countRoughNormal(slope->rough,slope->normal);
+                             }
+                        }else{
+                            bool up= false, down = false;
+                            bool beforeSlope = (it->second)->isSlope(map_xy,up,down); //before delete isSlope
+                             Eigen::Matrix3f C0 = (it->second)->covariance_matrix;
+                             Eigen::Vector3f u0 = (it->second)->xyz_centroid;
+                             int N =  (it->second)->N ;
+                             int M =  (it->second)->lPoints.size();
+                             Eigen::Matrix3f C1,covariance_matrix;
+                             Eigen::Vector4f temp_u;
+                             Eigen::Vector3f u1,xyz_centroid;
+                             pcl::compute3DCentroid(*point_cloud_ptr,temp_u);
+                             pcl::computeCovarianceMatrix(*point_cloud_ptr,temp_u,C1);
+                             u1<<temp_u(0),temp_u(1),temp_u(2);
+                             xyz_centroid =
+                                     ( N*u0 + M*u1) / (M+N);
+                             covariance_matrix =
+                                     ((N-1)*C0 + (M-1)*C1 + M*N/(M+N)*((u0-u1)*((u0-u1).transpose()))) / (M+N-1);
+                             (it->second)->xyz_centroid = xyz_centroid;
+                             (it->second)->covariance_matrix = covariance_matrix;
+                             (it->second)->N += (it->second)->lPoints.size();
+                             (it->second)->lPoints.clear();
+                             if(beforeSlope){
+                                 map<string,Slope *,CmpByKeyUD>::iterator cellItor = cell->map_slope.find((it->second)->z);
+                                 if(cellItor == cell->map_slope.end()){
+                                     cout<<"cant find slope by z, error\n";
+                                     return false;
+                                 }else{
+                                     if((it->second)->isSlope(map_xy,up,down)){
+                                         //change the old slope's u,C
+                                         (cellItor->second)->mean.x = (it->second)->xyz_centroid(0);
+                                         (cellItor->second)->mean.y = (it->second)->xyz_centroid(1);
+                                         (cellItor->second)->mean.z = (it->second)->xyz_centroid(2);
+                                         (cellItor->second)->up = up,(cellItor->second)->down = down;
+                                         (it->second)->countRoughNormal((cellItor->second)->rough,(cellItor->second)->normal);
+                                     }else{
+                                         //delete the old slope
+                                         cell->map_slope.erase(cellItor++);
+                                     }
+                                 }
+                             }else{
+                                 if((it->second)->isSlope(map_xy,up,down)){
+                                     //new Slope
+                                     Slope * slope = new Slope();
+                                     cell->map_slope.insert(make_pair((it->second)->z,slope));
+                                     slope->mean.x = (it->second)->xyz_centroid(0);
+                                     slope->mean.y = (it->second)->xyz_centroid(1);
+                                     slope->mean.z = (it->second)->xyz_centroid(2);
+                                     slope->morton_xy = (it->second)->morton;
+                                     slope->morton_z= (it->second)->z;
+                                     slope->up = up,slope->down = down;
+                                     slope->father = NULL;
+                                     slope->h = slope->g = slope->f = FLT_MAX;
+                                     (it->second)->countRoughNormal(slope->rough,slope->normal);
+                                 }
+                             }
+                        }                        
+                    }
+                    it++;
+                }
+            }//else end
+             itor++;
+        } //change morton list end
+            cout<<"change 2D map done.\n";
+            return true;
+    }
+
+    //change-delete map
+    bool del2DMap(){
+        cout<<"start delete 2D map\n";
+        if(delMorton_list.size() == 0)
+            return false;
+        list<string>::iterator itor = delMorton_list.begin();
+//        int delete_num = 0;
+        while(itor != delMorton_list.end()){
+            //find if it's contained in cell_morton_list
+            if(map_cell.size() == 0)
+                return false;
+            string changeMorton = *itor;
+            map<string,Cell *>::iterator map_it= map_cell.find(changeMorton);
+            if(map_it != map_cell.end()) {
+//                cout<<"changemorton \n"<<changeMorton<<endl;
+                //handle the exsit cell-update node and slope
+                Cell * cell = map_it->second; //get the exist cell
+                multimap<string,daysun::OcNode *>::iterator  it = map_xy.find(changeMorton);
+                //for each node morton_xy==target
+                while(it != map_xy.end()){
+//                    cout<<"map_xy it "<<it->first<<endl;
+                    if((it->first).compare(changeMorton) != 0){
+                        break;
+                    }
+                    if((it->second)->lDelPoints.size() >= MINPOINTSIZE){                        
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
+                        std::list<pcl::PointXYZ>::iterator node_iter = (it->second)->lDelPoints.begin();
+                        while(node_iter != (it->second)->lDelPoints.end()){
+                             point_cloud_ptr->points.push_back (*node_iter);
+                             node_iter++;
+                        }
+                        bool up= false, down = false;
+                        bool beforeSlope = (it->second)->isSlope(map_xy,up,down); //before delete isSlope
+                        Eigen::Matrix3f C0 = (it->second)->covariance_matrix;
+                        Eigen::Vector3f u0 = (it->second)->xyz_centroid;
+                        int N =  (it->second)->N ;
+                        int M =  -(it->second)->lDelPoints.size(); ///M = -M, delete
+                        if(N+M <= 0){
+                            //delete node and slope
+                            if(beforeSlope){
+                                map<string,Slope *,CmpByKeyUD>::iterator cellItor = cell->map_slope.find((it->second)->z);
+                                if(cellItor != cell->map_slope.end()){
+                                    cell->map_slope.erase(cellItor);//delete slope
+//                                    delete_num++;
+                                }
+                            }
+                            //delete node
+                            map_xy.erase(it++);//delete node
+                            continue;
+                        }else{
+                            Eigen::Matrix3f C1,covariance_matrix;
+                            Eigen::Vector4f temp_u;
+                            Eigen::Vector3f u1,xyz_centroid;
+                            pcl::compute3DCentroid(*point_cloud_ptr,temp_u);
+                            pcl::computeCovarianceMatrix(*point_cloud_ptr,temp_u,C1);
+                            u1<<temp_u(0),temp_u(1),temp_u(2);
+                            xyz_centroid =
+                                    ( N*u0 + M*u1) / (N+M);
+                            covariance_matrix =
+                                    ((N-1)*C0 + (M-1)*C1 + M*N/(M+N)*((u0-u1)*((u0-u1).transpose()))) / (M+N-1);
+                            (it->second)->xyz_centroid = xyz_centroid;
+                            (it->second)->covariance_matrix = covariance_matrix;
+                            (it->second)->N -= (it->second)->lDelPoints.size();
+                            (it->second)->lDelPoints.clear();
+
+                            //slope
+                            //--based on the before slope + after slope
+                            if(beforeSlope){
+                                map<string,Slope *,CmpByKeyUD>::iterator cellItor = cell->map_slope.find((it->second)->z);
+                                if(cellItor != cell->map_slope.end()){
+                                    if((it->second)->isSlope(map_xy,up,down)){
+                                        //change the old slope's u,C
+                                        (cellItor->second)->mean.x = (it->second)->xyz_centroid(0);
+                                        (cellItor->second)->mean.y = (it->second)->xyz_centroid(1);
+                                        (cellItor->second)->mean.z = (it->second)->xyz_centroid(2);
+                                        (cellItor->second)->up = up,(cellItor->second)->down = down;
+                                        (it->second)->countRoughNormal((cellItor->second)->rough,(cellItor->second)->normal);
+                                    }else{
+                                        //delete the old slope
+                                        cell->map_slope.erase(cellItor);
+//                                        delete_num++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    it++;
+                }
+            }//if end
+             itor++;
+        } //change morton list end
+//        cout<<"delete slope num "<<delete_num<<endl;
+            return true;
     }
 
     //for visualization
@@ -589,7 +852,7 @@ public:
                             marker.color.r = 0.5;                            
                             if(color == 1){
                                 //for testing change
-                                marker.color.g =0.5;
+                                marker.color.g =1;
                                 marker.color.b =1;
                             }
                             marker.lifetime = ros::Duration();                            
@@ -607,7 +870,7 @@ public:
     }
     }
 
-    //for visualization
+    //for visualization-bottom grid
     void showBottom(ros::Publisher marker_pub,float radius){
         ros::Rate r(50);
         uint32_t shape = visualization_msgs::Marker::CUBE; //SPHERE ARROW CYLINDER
@@ -681,134 +944,6 @@ public:
         int morton = countMorton(nx,ny);
         morton_xy = stringAndFloat( xy_belong, morton);
         morton_z =stringAndFloat( z_belong , nz);
-    }
-
-    /// might have some mistakes
-    bool change2DMap(){
-        cout<<"start change 2D map\n";
-        if(changeMorton_list.size() == 0)
-            return false;
-        list<string>::iterator itor = changeMorton_list.begin();
-        while(itor != changeMorton_list.end()){
-            //find if it's contained in cell_morton_list
-            if(map_cell.size() == 0)
-                return false;
-            string changeMorton = *itor;
-            map<string,Cell *>::iterator map_it= map_cell.find(changeMorton);
-            if(map_it == map_cell.end()) {
-                //not find 1
-                //create a new cell- the same as the initial
-                Cell * cell = new Cell(*itor);
-                map_cell.insert(map<string,Cell*>::value_type(cell->getMorton(), cell));
-                if(map_xy.count(*itor) == 0){
-                    cout<<"wrong\n";
-                    return false;
-                }else{
-                    multimap<string,daysun::OcNode *>::iterator  it = map_xy.find(*itor);
-                    while(it != map_xy.end()){
-                        if((it->first).compare(*itor) != 0)
-                            break;
-                        if((it->second)->lPoints.size() >= 3){
-                            pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
-                            std::list<pcl::PointXYZ>::iterator node_iter = (it->second)->lPoints.begin();
-                            while(node_iter != (it->second)->lPoints.end()){
-                                 point_cloud_ptr->points.push_back (*node_iter);
-                                 node_iter++;
-                            }
-                            Eigen::Matrix3f covariance_matrix; //C
-                            Eigen::Vector4f xyz_centroid; //mean
-                            pcl::compute3DCentroid(*point_cloud_ptr,xyz_centroid);
-                            pcl::computeCovarianceMatrix(*point_cloud_ptr,xyz_centroid,covariance_matrix);
-                            (it->second)->xyz_centroid << xyz_centroid(0),xyz_centroid(1),xyz_centroid(2);
-                            (it->second)->covariance_matrix = covariance_matrix;
-                              (it->second)->N += (it->second)->lPoints.size();
-                            (it->second)->lPoints.clear();
-                            bool up= false, down = false;
-                            if((it->second)->isSlope(map_xy,up,down) ){
-                                Slope * slope = new Slope();
-                                cell->map_slope.insert(make_pair((it->second)->z,slope));
-                                slope->mean.x = xyz_centroid(0);
-                                slope->mean.y = xyz_centroid(1);
-                                slope->mean.z = xyz_centroid(2);
-                                slope->morton_xy = (it->second)->morton;
-                                slope->morton_z= (it->second)->z;
-                                slope->up = up,slope->down = down;
-//                                 slope->father = NULL;
-//                                slope->h = slope->g = slope->f = FLT_MAX;
-                                (it->second)->countRoughNormal(slope->rough,slope->normal);
-                            }
-                        }
-                        it++;
-                    }
-                }
-            }else{
-                //find 1-handle the exsit cell-update it
-                Cell * cell = map_it->second;
-                multimap<string,daysun::OcNode *>::iterator  it = map_xy.find(changeMorton);
-                while(it != map_xy.end()){
-                    if((it->first).compare(changeMorton) != 0)
-                        break;
-                    if((it->second)->lPoints.size() >= 3){
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
-                        std::list<pcl::PointXYZ>::iterator node_iter = (it->second)->lPoints.begin();
-                        while(node_iter != (it->second)->lPoints.end()){
-                             point_cloud_ptr->points.push_back (*node_iter);
-                             node_iter++;
-                        }
-                        if((Eigen::Matrix3f::Zero(3,3) == (it->second)->covariance_matrix )
-                                && (Eigen::Vector3f::Zero()==  (it->second)->xyz_centroid)){
-                            //not initial
-                            Eigen::Matrix3f covariance_matrix; //C
-                            Eigen::Vector4f xyz_centroid; //mean
-                            pcl::compute3DCentroid(*point_cloud_ptr,xyz_centroid);
-                            pcl::computeCovarianceMatrix(*point_cloud_ptr,xyz_centroid,covariance_matrix);
-                            (it->second)->xyz_centroid <<xyz_centroid(0),xyz_centroid(1),xyz_centroid(2);
-                            (it->second)->covariance_matrix = covariance_matrix;
-                        }else{
-                            //has initial data--update
-                             Eigen::Matrix3f C0 = (it->second)->covariance_matrix;
-                             Eigen::Vector3f u0 = (it->second)->xyz_centroid;
-                             int N =  (it->second)->N ;
-                             int M =  (it->second)->lPoints.size();
-                             Eigen::Matrix3f C1,covariance_matrix;
-                             Eigen::Vector4f temp_u;
-                             Eigen::Vector3f u1,xyz_centroid;
-                             pcl::compute3DCentroid(*point_cloud_ptr,temp_u);
-                             pcl::computeCovarianceMatrix(*point_cloud_ptr,temp_u,C1);
-                             u1<<temp_u(0),temp_u(1),temp_u(2);
-                             xyz_centroid =
-                                     ( N*u0 + M*u1) / (M+N);
-                             covariance_matrix =
-                                     ((N-1)*C0 + (M-1)*C1 + M*N/(M+N)*((u0-u1)*((u0-u1).transpose()))) / (M+N-1);
-                             (it->second)->xyz_centroid = xyz_centroid;
-                             (it->second)->covariance_matrix = covariance_matrix;
-//                                      cout<<"has initial data--update\n"<<  (it->second)->xyz_centroid
-//                                         <<endl<<(it->second)->covariance_matrix <<endl;
-                        }
-                        (it->second)->N += (it->second)->lPoints.size();
-                        (it->second)->lPoints.clear();
-                        bool up= false, down = false;
-                        if((it->second)->isSlope(map_xy,up,down) ){
-                            Slope * slope = new Slope();
-                            cell->map_slope.insert(make_pair((it->second)->z,slope));
-                            slope->mean.x = (it->second)->xyz_centroid(0);
-                            slope->mean.y = (it->second)->xyz_centroid(1);
-                            slope->mean.z = (it->second)->xyz_centroid(2);
-                            slope->morton_xy = (it->second)->morton;
-                            slope->morton_z= (it->second)->z;
-                            slope->up = up,slope->down = down;
-//                             slope->father = NULL;
-//                            slope->h = slope->g = slope->f = FLT_MAX;
-                            (it->second)->countRoughNormal(slope->rough,slope->normal);
-                        }
-                    }
-                    it++;
-                }
-            }
-             itor++;
-        } //change morton list end
-            cout<<"change 2D map done.\n";
-            return true;
     }
 
     //compute cost map

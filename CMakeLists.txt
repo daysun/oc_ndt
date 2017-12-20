@@ -70,6 +70,12 @@ add_executable(publishChangePoint
 target_link_libraries(publishChangePoint
 ${PCL_LIBRARIES} )
 
+#publish del change
+add_executable(publishDel
+ src/publishDel.cpp)
+target_link_libraries(publishDel
+${PCL_LIBRARIES} )
+
 #receive the point and pocess the data
 add_executable(receivePoint
      include/Stopwatch.h
@@ -96,7 +102,8 @@ ${PCL_LIBRARIES}
 add_executable(test_mine
  src/test/testopebmp.cpp)
 target_link_libraries(test_mine
- )
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
 
 #install(TARGETS ${PROJECT_NAME}
 #  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
