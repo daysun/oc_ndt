@@ -1,0 +1,19 @@
+<launch>
+    <node
+    pkg="oc_ndt"
+    type="publishPoint"
+    name="publishPoint"    
+    />
+    <node
+    pkg="oc_ndt"
+    type="receivePoint"
+    name="receivePoint"
+    required="true"
+    output="screen"
+    />
+    <node
+    name="rviz"
+    pkg="rviz"
+    type="rviz"
+    required="true" />
+</launch>

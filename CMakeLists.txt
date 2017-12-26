@@ -35,6 +35,15 @@ ELSE()
         ENDIF()
 ENDIF()
 
+#openmp
+FIND_PACKAGE( OpenMP REQUIRED)
+if(OPENMP_FOUND)
+message("OPENMP FOUND")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 catkin_package(
   DEPENDS sensor_msgs tf  message_runtime geometry_msgs std_msgs)
 
@@ -61,10 +70,10 @@ add_executable(publishChangePoint
 target_link_libraries(publishChangePoint
 ${PCL_LIBRARIES} )
 
-#publish change
-add_executable(testCU
- src/test/test_c_u.cpp)
-target_link_libraries(testCU
+#publish del change
+add_executable(publishDel
+ src/publishDel.cpp)
+target_link_libraries(publishDel
 ${PCL_LIBRARIES} )
 
 #receive the point and pocess the data
@@ -89,19 +98,29 @@ ${PCL_LIBRARIES}
 #${PCL_LIBRARIES}
 #${OpenCV_LIBS} )
 
-add_executable(test_small
- src/test/test_write_pcl.cpp)
-target_link_libraries(test_small
-${PCL_LIBRARIES})
+#test
+add_executable(txt2pcd
+ src/test/txt2pcd.cpp)
+target_link_libraries(txt2pcd
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
+add_executable(bag2pcd
+ src/test/bag2pcd.cpp)
+target_link_libraries(bag2pcd
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
+add_executable(testSth
+ src/test/testSth.cpp)
+target_link_libraries(testSth
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
 
-#add_executable(octreeDivision
-#     include/Stopwatch.h
-#      include/Vec2.h
-#     include/Vec3.h
-# src/octreeDivision.cpp)
-#target_link_libraries(octreeDivision
-#${PCL_LIBRARIES}
-#${OpenCV_LIBS} )
+#kitti to pcd
+#ADD_EXECUTABLE(kitti2pcd src/test/kitti2pcd.cpp)
+#TARGET_LINK_LIBRARIES(kitti2pcd ${Boost_LIBRARIES} ${PCL_LIBRARIES})
+
+#ADD_EXECUTABLE(kittitrackletextract src/test/tracklets.h src/test/kittitrackletextract.cpp )
+#TARGET_LINK_LIBRARIES(kittitrackletextract ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 
 #install(TARGETS ${PROJECT_NAME}
 #  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
