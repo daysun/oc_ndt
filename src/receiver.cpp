@@ -29,9 +29,9 @@ using namespace daysun;
 typedef multimap<string,daysun::OcNode *>  MAP_INT_MORTON_MULTI;
 typedef multimap<string,daysun::OcNode *>::iterator iterIntNode;
 
-RobotSphere robot(0.25); //radius--variable--according to the range of map
+RobotSphere robot(0.5); //radius--variable--according to the range of map
 //test-0.25, sys-0.125
-daysun::TwoDmap map2D(robot.getR());
+daysun::TwoDmap map2D(0.25);
 ros::Publisher marker_pub,change_pub,markerArray_pub,marker_pub_bo,route_pub/*,del_pub*/;
 
 //ofstream outfile("/home/daysun/testPointsSys.txt", ofstream::app);
@@ -152,7 +152,7 @@ void chatterCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg)
 
     if(marker_pub.getNumSubscribers()){
         map2D.showInital(marker_pub,robot,0);
-        map2D.showBottom(marker_pub_bo,robot.getR());
+//        map2D.showBottom(marker_pub_bo,robot.getR());
         cout<<"initial show done\n";
     }    
 
@@ -180,6 +180,7 @@ void changeCallback(const sensor_msgs::PointCloud2::ConstPtr & my_msg){
          uniformDivision(temp_cloud->points[i],robot.getR(),true);
       }
      double time_end1 = stopwatch();
+     cout<<"point size "<<temp_cloud->points.size()<<endl;
      cout<<"change/add map- division done. Time cost: "<<(time_end1-time_start1)<<" s\n";
      cout<<"change/add map- morton size: "<<map2D.changeMorton_list.size()<<endl;
 
@@ -247,8 +248,9 @@ int main(int argc, char **argv)
   route_pub= n.advertise<visualization_msgs::MarkerArray>("route_marker_array", 1000);
 
   ros::Subscriber sub = n.subscribe("publisher/cloud_fullSys", 1000, chatterCallback); //initial
-  ros::Subscriber sub_change = n.subscribe("publisher/cloud_change", 1000,changeCallback);//change-add
-  ros::Subscriber sub_del = n.subscribe("publisher/cloud_del", 1000, delCallback);//change-delete
+//  ros::Subscriber sub_change = n.subscribe("publisher/cloud_change", 1000,changeCallback);//change-add
+//  ros::Subscriber sub_change = n.subscribe("/kitti/velo/pointcloud", 100,changeCallback);
+//  ros::Subscriber sub_del = n.subscribe("publisher/cloud_del", 1000, delCallback);//change-delete
   ros::spin();
   ros::shutdown();
   return 0;

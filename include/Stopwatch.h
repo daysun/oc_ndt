@@ -14,6 +14,13 @@ string stringAndFloat(string a, float b){
        return oss.str() ;
 }
 
+int strToInt(string s){
+    int num;
+       stringstream ss(s);
+       ss >> num;
+       return num;
+}
+
 double stopwatch()
 {
 	struct timeval time;
@@ -21,17 +28,24 @@ double stopwatch()
 	return 1.0 * time.tv_sec + time.tv_usec / (double)1e6;
 }
 
-int decToBinary(int k){
-    int s[20],rem,i=0,t=0;
-    do{
-        rem = k%2;
-        k= k/2;
-        s[i++] = rem;
-    }while(k!=0);
-    for(int j = --i;j>=0;j--){
-        t += s[j] * pow(10.0,j);
+int decToBinary(int n){
+    string s;//result
+    for(int a = n; a ;a = a/2)
+    {
+        s=s+(a%2?'1':'0');
     }
-    return t;
+    std::reverse(s.begin(),s.end());
+    return strToInt(s);
+}
+
+string decToBinaryStr(int n){
+    string s;//result
+    for(int a = n; a ;a = a/2)
+    {
+        s=s+(a%2?'1':'0');
+    }
+    std::reverse(s.begin(),s.end());
+    return s;
 }
 
 string intToString(int k){
@@ -39,13 +53,6 @@ string intToString(int k){
    ss<<k;
    string str = ss.str();
    return str;
-}
-
-int strToInt(string s){
-    int num;
-       stringstream ss(s);
-       ss >> num;
-       return num;
 }
 
 int binToDec(int k){
@@ -89,7 +96,7 @@ int countMorton(int a,int b){
             line.insert(0,"0");
         }
     }
- //  cout<<line<<","<<column<<endl;
+//   cout<<line<<","<<column<<endl;
     int size = line.size() + column.size();
     char * reverse = new char[size+1];
     int j  =0;
@@ -98,14 +105,14 @@ int countMorton(int a,int b){
         reverse[j++] = line[i];
     }
     reverse[size] = '\0';
-    // cout<<reverse<<endl;
+//     cout<<reverse<<endl;
     stringstream ss;
    ss<<reverse;
    string str = ss.str();
     string result(str.rbegin(),str.rend());
 // cout<<result<<endl;
     int res = binToDec(result);
-  //   cout<<res<<endl;
+//     cout<<res<<endl;
     return  res;
 }
 
@@ -118,30 +125,37 @@ int reverseToDec(char * reverse){
     return res;
 }
 
+int ToDec(char * reverse){
+    stringstream ss;
+   ss<<reverse;
+   string str = ss.str();
+    int res = binToDec(str);
+    return res;
+}
+
 //count out column and line from morton_xy
 //for example
 //morton_xy    55
 //morton_xy    110111
 //return line 5: 0101 column 7:0111
 void mortonToXY(int & a, int &b, int morton){
-    string m = intToString(decToBinary(morton));
+    string m = decToBinaryStr(morton);
     //add '0'
-    if(m.size()/2 != 0){
+    if(m.size()%2 != 0){ //attention
         m.insert(0,"0");
     }
-    string reverse(m.rbegin(),m.rend());
-    int size = reverse.size()/2 ;
+    int size = m.size()/2 ;
     char * column = new char[size+1];
     char * line= new char[size+1];
     int j = 0;
-    for(int i=0;i<reverse.size();i+=2,j++){
-        column[j] = reverse[i];
-        line[j] = reverse[i+1];
+    for(int i=0;i<m.size();i+=2,j++){
+        line[j] = m[i];
+        column[j] = m[i+1];
     }
     column[size] = '\0';
     line[size] = '\0';
-    a = reverseToDec(line);
-    b = reverseToDec(column);
+    a = ToDec(line);
+    b = ToDec(column);
 }
 
 

@@ -11,4 +11,9 @@
     required="true"
     output="screen"
     />
+    <node
+    name="rviz"
+    pkg="rviz"
+    type="rviz"
+    required="true" />
 </launch>

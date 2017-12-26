@@ -115,7 +115,6 @@ struct OcNode
         if(roughness == 0) //for visualization
             roughness = 0.01;
     }
-
 };
 
 struct CmpByKeyUD {
@@ -133,7 +132,7 @@ struct CmpByKeyUD {
 struct Slope{
     Vector3f normal; //Normal vector of the slope
     float rough;  //roughness of the slope
-     Vec3 mean;  //mean value of the slope
+//     Vec3 mean;  //mean value of the slope
      float h;
      float g;
      float f;  //f = g+h
@@ -230,7 +229,7 @@ class TwoDmap {
     int mtnZToNum(string k1){
         int num1 = strToInt( k1.substr(1,k1.length()-1));
         string be1 = k1.substr(0,1);
-        be1.compare("D") == 0? num1 *= -1: num1 = num1;
+        be1.compare("D") == 0? num1 *= -1: num1 = num1;        
         return num1;
     }
 
@@ -243,19 +242,66 @@ class TwoDmap {
             while(sit != (mit->second)->map_slope.end()){
                 //judge if it's traversible -morton_z normal rough
                   if(sit->second->up != true)
-                if((sit->second)->rough <= robot.getRough())
-                    if(countAngle((sit->second)->normal,normal) <= robot.getAngle())
-                        if((abs(mtnZToNum((sit->second)->morton_z) - mtnZToNum(morton_z)) <= ceil((float)robot.getReachableHeight()/gridLen)))
-                            list.push_back(sit->second);
+                      if((sit->second)->rough <= robot.getRough())
+                          if(countAngle((sit->second)->normal,normal) <= robot.getAngle())
+                              if((abs(mtnZToNum((sit->second)->morton_z) - mtnZToNum(morton_z)) <= ceil((float)robot.getReachableHeight()/gridLen)))
+                                  list.push_back(sit->second);
                   sit++;
-                }
-            }
+             }
+         }
     }   
 
+    //find all the surrounding neighbors
+    void checkSlope(list<Slope *>& AllSlope,Slope * slope,RobotSphere & robot){
+        list<Slope *> neiSlope = AccessibleNeighbors(slope,robot);
+        list<Slope *>::iterator itN = neiSlope.begin();
+        while(itN != neiSlope.end()){
+            if(!isContainedQ(*itN,AllSlope)){
+                AllSlope.push_back(*itN);
+            }
+            itN++;
+        }
+    }
+
+    bool isContainedQ(Slope * s,  list<Slope *> & Q){
+        list<Slope *>::iterator it = Q.begin();
+        while(it != Q.end()){
+            if(s->morton_xy.compare((*it)->morton_xy )==0 && s->morton_z.compare((*it)->morton_z )==0 )
+                return true;
+            it++;
+        }
+        return false;
+    }
+
     //true-collide, false-no collide
-    bool CollisionCheck(Slope * slope,float r){
+    bool CollisionCheck(Slope * slope,int n,RobotSphere & robot){
+        float r =robot.getRobotR();//radius
         if(slope->up == true)
             return true; //collide
+
+        //find all the surrounding neighbors
+        list<Slope *> AllSlope;
+        AllSlope.clear();
+        AllSlope.push_back(slope);
+        while(n>0){
+            list<Slope *>::iterator itSlope = AllSlope.begin();
+            while(itSlope != AllSlope.end()){
+                checkSlope(AllSlope,*itSlope,robot);
+                itSlope++;
+            }
+            n--;
+        }
+//        cout<<"surrounding neighbors size "<<AllSlope.size()<<endl;
+        list<Slope *>::iterator itSlope = AllSlope.begin();
+        while(itSlope != AllSlope.end()){
+            if(mtnZToNum((*itSlope)->morton_z) <= mtnZToNum(slope->morton_z) && (*itSlope)->up == true)
+                return true;//collide
+            if((mtnZToNum((*itSlope)->morton_z) > mtnZToNum(slope->morton_z)) &&
+                    (mtnZToNum((*itSlope)->morton_z) < mtnZToNum(slope->morton_z)+2*r/gridLen))
+                return true;//collide
+            itSlope++;
+        }
+
         string xy = slope->morton_xy;
         string z= slope->morton_z;
         map<string,Cell *>::iterator it = map_cell.find(xy);
@@ -273,6 +319,7 @@ class TwoDmap {
                 }
                 return false;//no collide
         }
+
     }
 
     float countAngle(Vector3f n1, Vector3f n2){
@@ -282,15 +329,6 @@ class TwoDmap {
         return  an;
     }
 
-    bool isContainedQ(Slope * s,  list<Slope *> & Q){
-        list<Slope *>::iterator it = Q.begin();
-        while(it != Q.end()){
-            if(s->morton_xy.compare((*it)->morton_xy )==0 && s->morton_z.compare((*it)->morton_z )==0 )
-                return true;
-            it++;
-        }
-        return false;
-    }
 public:    
     multimap<string,OcNode *>  map_xy/*,map_z*/; //ABCD+morton, UD+height---index
     TwoDmap(const float res):gridLen(res){}
@@ -391,10 +429,7 @@ public:
                             bool up= false, down = false;
                             if((it->second)->isSlope(map_xy,up,down) ){
                                 Slope * slope = new Slope();
-                                cell->map_slope.insert(make_pair((it->second)->z,slope));
-                                slope->mean.x = xyz_centroid(0);
-                                slope->mean.y = xyz_centroid(1);
-                                slope->mean.z = xyz_centroid(2);
+                                cell->map_slope.insert(make_pair((it->second)->z,slope));                                
                                 slope->morton_xy = (it->second)->morton;
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
@@ -454,10 +489,7 @@ public:
                             bool up= false, down = false;
                             if((it->second)->isSlope(map_xy,up,down) ){
                                 Slope * slope = new Slope();
-                                cell->map_slope.insert(make_pair((it->second)->z,slope));
-                                slope->mean.x = xyz_centroid(0);
-                                slope->mean.y = xyz_centroid(1);
-                                slope->mean.z = xyz_centroid(2);
+                                cell->map_slope.insert(make_pair((it->second)->z,slope));                              
                                 slope->morton_xy = (it->second)->morton;
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
@@ -499,10 +531,7 @@ public:
                             bool up= false, down = false;
                             if((it->second)->isSlope(map_xy,up,down)){
                                 Slope * slope = new Slope();
-                                cell->map_slope.insert(make_pair((it->second)->z,slope));
-                                slope->mean.x = (it->second)->xyz_centroid(0);
-                                slope->mean.y = (it->second)->xyz_centroid(1);
-                                slope->mean.z = (it->second)->xyz_centroid(2);
+                                cell->map_slope.insert(make_pair((it->second)->z,slope));                            
                                 slope->morton_xy = (it->second)->morton;
                                 slope->morton_z= (it->second)->z;
                                 slope->up = up,slope->down = down;
@@ -539,9 +568,6 @@ public:
                                  }else{
                                      if((it->second)->isSlope(map_xy,up,down)){
                                          //change the old slope's u,C
-                                         (cellItor->second)->mean.x = (it->second)->xyz_centroid(0);
-                                         (cellItor->second)->mean.y = (it->second)->xyz_centroid(1);
-                                         (cellItor->second)->mean.z = (it->second)->xyz_centroid(2);
                                          (cellItor->second)->up = up,(cellItor->second)->down = down;
                                          (it->second)->countRoughNormal((cellItor->second)->rough,(cellItor->second)->normal);
                                      }else{
@@ -554,9 +580,6 @@ public:
                                      //new Slope
                                      Slope * slope = new Slope();
                                      cell->map_slope.insert(make_pair((it->second)->z,slope));
-                                     slope->mean.x = (it->second)->xyz_centroid(0);
-                                     slope->mean.y = (it->second)->xyz_centroid(1);
-                                     slope->mean.z = (it->second)->xyz_centroid(2);
                                      slope->morton_xy = (it->second)->morton;
                                      slope->morton_z= (it->second)->z;
                                      slope->up = up,slope->down = down;
@@ -648,9 +671,6 @@ public:
                                 if(cellItor != cell->map_slope.end()){
                                     if((it->second)->isSlope(map_xy,up,down)){
                                         //change the old slope's u,C
-                                        (cellItor->second)->mean.x = (it->second)->xyz_centroid(0);
-                                        (cellItor->second)->mean.y = (it->second)->xyz_centroid(1);
-                                        (cellItor->second)->mean.z = (it->second)->xyz_centroid(2);
                                         (cellItor->second)->up = up,(cellItor->second)->down = down;
                                         (it->second)->countRoughNormal((cellItor->second)->rough,(cellItor->second)->normal);
                                     }else{
@@ -672,7 +692,7 @@ public:
     }
 
     //for visualization
-    void countPositionXYZ(float & x,float &y,float &z,string s_xy,string s_z){
+    void countPositionXYZ(float & x,float &y,float &z,string s_xy,string s_z){        
         string belongxy = s_xy.substr(0,1);
         string belongz = s_z.substr(0,1);
          int mortonxy = strToInt( s_xy.substr(1,s_xy.length()-1));
@@ -701,6 +721,33 @@ public:
          else if(belongz.compare("D") == 0){
              z = cloudFirst.z - (mortonz-0.5)*gridLen;
          }
+    }
+
+    //tranform position into morton_xy and morton_z
+    void transMortonXYZ(Vec3 position, string & morton_xy, string & morton_z){
+        string xy_belong,z_belong;
+        if(position.x > cloudFirst.x){
+            if(position.y >cloudFirst.y)
+                xy_belong = "A";
+            else
+                xy_belong = "B";
+        }else{
+            if(position.y >cloudFirst.y)
+                xy_belong = "C";
+            else
+                xy_belong = "D";
+        }
+        if(position.z > cloudFirst.z) z_belong = "U"; //up
+        else z_belong = "D"; //down
+        int nx = (int)ceil(float(abs(position.x-cloudFirst.x)/gridLen));
+        int ny = (int)ceil(float(abs(position.y-cloudFirst.y)/gridLen));
+        int nz = (int)ceil(float(abs(position.z-cloudFirst.z)/gridLen));
+        nx == 0? nx =1:nx=nx;
+        ny == 0? ny =1:ny=ny;
+        nz == 0? nz =1:nz=nz;
+        int morton = countMorton(nx,ny);
+        morton_xy = stringAndFloat( xy_belong, morton);
+        morton_z =stringAndFloat( z_belong , nz);
     }
 
     //for visualiation
@@ -733,13 +780,14 @@ public:
                     m_s.pose.orientation.y = normal(1);
                     m_s.pose.orientation.z = normal(2);
                     m_s.pose.orientation.w = 1.0;
-                    m_s.scale.x = radius;
-                    m_s.scale.y = radius;
-                    m_s.scale.z = 2.5* rough; //not using the rough, for visualization
+                    m_s.scale.x = gridLen;
+                    m_s.scale.y = gridLen;
+                    m_s.scale.z = 2.5* rough;
                     if(color == 0){ //traversibility
                         m_s.color.a = 1.0;
                         m_s.color.b = 1.0;
                         m_s.color.r = 0.5;
+                        m_s.scale.z = gridLen/2;
                     }
                     else if(color == 1){ //not traversible
                         m_s.color.a = 1.0;
@@ -755,7 +803,7 @@ public:
                         m_s.color.b= 0.5;
                         m_s.color.r = 0.5;
                         m_s.color.g = 0.5;
-                        m_s.scale.z = radius;
+                        m_s.scale.z = gridLen;
                     }
                     m_s.lifetime = ros::Duration();
                     mArray.markers.push_back(m_s);
@@ -772,7 +820,7 @@ public:
 
     //for visualization-initial
     void showInital(ros::Publisher marker_pub,RobotSphere & robot,int color =0){ //0-,1-change
-        float radius=robot.getR();
+        float radius=gridLen;
         ros::Rate r(50);
         uint32_t shape = visualization_msgs::Marker::CUBE; //SPHERE ARROW CYLINDER
          visualization_msgs::MarkerArray mArray;
@@ -780,94 +828,94 @@ public:
         if (ros::ok()){
             //1-for start and goal
             {
-            list<Vec3> lv ;
-            lv.push_back(robot.getGoal());
-            lv.push_back(robot.getPosition());
-            list<Vec3>::iterator ilv = lv.begin();
-            int j = 0;
-            while(ilv != lv.end()){
-                string m_xy,m_z;
-                float x,y,z;
-                transMortonXYZ(*ilv,m_xy,m_z);
-                countPositionXYZ(x,y,z,m_xy,m_z);
-                visualization_msgs::Marker m_s;
-                m_s.ns  = "basic_shapes";
-                m_s.header.frame_id = "/my_frame";
-                m_s.header.stamp = ros::Time::now();
-                m_s.id = j;
-                m_s.type = shape;
-                m_s.action = visualization_msgs::Marker::ADD;
-                m_s.pose.position.x = x;
-                m_s.pose.position.y = y;
-                m_s.pose.position.z = z;
-                m_s.scale.x = radius; //the same as radius
-                m_s.scale.y = radius;
-                m_s.scale.z = radius;
-                m_s.pose.orientation.x = 0;
-                m_s.pose.orientation.y = 0;
-                m_s.pose.orientation.z = 0;
-                m_s.pose.orientation.w = 1.0;
-                m_s.color.a = 1.0;
-                m_s.color.r = 0.5;
-                m_s.color.g = 0.5;
-                m_s.lifetime = ros::Duration();
-                mArray.markers.push_back(m_s);
-                ilv++;j++;
-            }
+                list<Vec3> lv ;
+                lv.push_back(robot.getGoal());
+                lv.push_back(robot.getPosition());
+                list<Vec3>::iterator ilv = lv.begin();
+                int j = 0;
+                while(ilv != lv.end()){
+                    string m_xy,m_z;
+                    float x,y,z;
+                    transMortonXYZ(*ilv,m_xy,m_z);
+                    countPositionXYZ(x,y,z,m_xy,m_z);
+                    visualization_msgs::Marker m_s;
+                    m_s.ns  = "basic_shapes";
+                    m_s.header.frame_id = "/my_frame";
+                    m_s.header.stamp = ros::Time::now();
+                    m_s.id = j;
+                    m_s.type = shape;
+                    m_s.action = visualization_msgs::Marker::ADD;
+                    m_s.pose.position.x = x;
+                    m_s.pose.position.y = y;
+                    m_s.pose.position.z = z;
+                    m_s.scale.x = radius; //the same as radius
+                    m_s.scale.y = radius;
+                    m_s.scale.z = radius;
+                    m_s.pose.orientation.x = 0;
+                    m_s.pose.orientation.y = 0;
+                    m_s.pose.orientation.z = 0;
+                    m_s.pose.orientation.w = 1.0;
+                    m_s.color.a = 1.0;
+                    m_s.color.r = 0.5;
+                    m_s.color.g = 0.5;
+                    m_s.lifetime = ros::Duration();
+                    mArray.markers.push_back(m_s);
+                    ilv++;j++;
+                }
             }
             //2-for every cell
-                    if(map_cell.size() != 0){
-                    map<string,Cell*>::iterator cell_iter= map_cell.begin();
-                    while(cell_iter != map_cell.end()){                       
-                         Cell * cell = cell_iter->second;
-                        //for every slope
-                         map<string,Slope *,CmpByKeyUD>::iterator slItor = cell->map_slope.begin();                        
-                         while(slItor != cell->map_slope.end()){
-                             i++;
-                            Vector3f normal = (slItor->second)->normal;                          
-                            float rough = (slItor->second)->rough;
-                            float x,y,z;
-                            string s_xy = (slItor->second)->morton_xy;
-                            string s_z = (slItor->second)->morton_z;                      
-                            countPositionXYZ(x,y,z,s_xy,s_z);                           
-                            //add marker
-                            visualization_msgs::Marker marker;
-                            marker.ns = "basic_shapes";
-                            marker.header.frame_id = "/my_frame";
-                            marker.header.stamp = ros::Time::now();
-                            marker.id = i; //same namespace and id will overwrite the old one
-                            marker.type = shape;
-                            marker.action = visualization_msgs::Marker::ADD;
-                            marker.pose.position.x = x;
-                            marker.pose.position.y = y;
-                            marker.pose.position.z = z;
-                            marker.pose.orientation.x = normal(0);
-                            marker.pose.orientation.y = normal(1);
-                            marker.pose.orientation.z = normal(2);
-                            marker.pose.orientation.w = 1.0;
-                            marker.scale.x = radius; //the same as radius
-                            marker.scale.y = radius;
-                            marker.scale.z = 0.05/*rough*/;
-                            marker.color.a = 1.0;
-                            marker.color.r = 0.5;                            
-                            if(color == 1){
-                                //for testing change
-                                marker.color.g =1;
-                                marker.color.b =1;
-                            }
-                            marker.lifetime = ros::Duration();                            
-                            mArray.markers.push_back(marker);
-                             slItor++;
-                         }
-                        cell_iter++;                        
-                    }
-          }
-                    if (marker_pub.getNumSubscribers() == 1){
-                        marker_pub.publish(mArray);
-                        ros::spinOnce();
-                           r.sleep();
-                    }
-    }
+            if(map_cell.size() != 0){
+                map<string,Cell*>::iterator cell_iter= map_cell.begin();
+                while(cell_iter != map_cell.end()){
+                     Cell * cell = cell_iter->second;
+                    //for every slope
+                     map<string,Slope *,CmpByKeyUD>::iterator slItor = cell->map_slope.begin();
+                     while(slItor != cell->map_slope.end()){
+                         i++;
+                        Vector3f normal = (slItor->second)->normal;
+//                            float rough = (slItor->second)->rough;
+                        string s_xy = (slItor->second)->morton_xy;
+                        string s_z = (slItor->second)->morton_z;
+                        float x,y,z;
+                        countPositionXYZ(x,y,z,s_xy,s_z);
+                        //add marker
+                        visualization_msgs::Marker marker;
+                        marker.ns = "basic_shapes";
+                        marker.header.frame_id = "/my_frame";
+                        marker.header.stamp = ros::Time::now();
+                        marker.id = i; //same namespace and id will overwrite the old one
+                        marker.type = shape;
+                        marker.action = visualization_msgs::Marker::ADD;
+                        marker.pose.position.x = x;
+                        marker.pose.position.y = y;
+                        marker.pose.position.z = z;
+                        marker.pose.orientation.x = normal(0);
+                        marker.pose.orientation.y = normal(1);
+                        marker.pose.orientation.z = normal(2);
+                        marker.pose.orientation.w = 1.0;
+                        marker.scale.x = radius; //the same as radius
+                        marker.scale.y = radius;
+                        marker.scale.z = 0.05/*rough*/;
+                        marker.color.a = 1.0;
+                        marker.color.r = 0.5;
+                        if(color == 1){
+                            //for testing change
+                            marker.color.g =1;
+                            marker.color.b =1;
+                        }
+                        marker.lifetime = ros::Duration();
+                        mArray.markers.push_back(marker);
+                        slItor++;
+                     }
+                    cell_iter++;
+                }
+            }
+            if (marker_pub.getNumSubscribers() == 1){
+                marker_pub.publish(mArray);
+                ros::spinOnce();
+                   r.sleep();
+            }
+        }
     }
 
     //for visualization-bottom grid
@@ -919,33 +967,6 @@ public:
         }
     }
 
-    //tranform position into morton_xy and morton_z
-    void transMortonXYZ(Vec3 position, string & morton_xy, string & morton_z){
-        string xy_belong,z_belong;
-        if(position.x > cloudFirst.x){
-            if(position.y >cloudFirst.y)
-                xy_belong = "A";
-            else
-                xy_belong = "B";
-        }else{
-            if(position.y >cloudFirst.y)
-                xy_belong = "C";
-            else
-                xy_belong = "D";
-        }
-        if(position.z > cloudFirst.z) z_belong = "U"; //up
-        else z_belong = "D"; //down
-        int nx = (int)ceil(float(abs(position.x-cloudFirst.x)/gridLen));
-        int ny = (int)ceil(float(abs(position.y-cloudFirst.y)/gridLen));
-        int nz = (int)ceil(float(abs(position.z-cloudFirst.z)/gridLen));
-        nx == 0? nx =1:nx=nx;
-        ny == 0? ny =1:ny=ny;
-        nz == 0? nz =1:nz=nz;
-        int morton = countMorton(nx,ny);
-        morton_xy = stringAndFloat( xy_belong, morton);
-        morton_z =stringAndFloat( z_belong , nz);
-    }
-
     //compute cost map
     void computeCost(Vec3 goal,RobotSphere & robot,ros::Publisher marker_pub){
         double time_start2 = stopwatch();
@@ -967,9 +988,12 @@ public:
              }
          }
 
+         int n = (ceil(2*robot.getRobotR()/gridLen)-1)/2; //ceil-compute more
+//         cout<<"n "<<n<<endl;
+
          //compute the surrounding morton code
          while(Q.size() != 0){
-             if(!CollisionCheck(Q.front(),robot.getRobotR() )){              
+             if(!CollisionCheck(Q.front(),n,robot )){
                  //no collision
                  list<Slope *> neiSlope = AccessibleNeighbors(Q.front(),robot);
                  list<Slope *>::iterator itN = neiSlope.begin();
@@ -977,8 +1001,7 @@ public:
                      if((*itN)->up == true){
                          (*itN)->h = FLT_MAX;
                          closed.push_back(*itN);
-                     }                     
-                     else{
+                     }else{
                          Vec3 q,itn;
                          string s_xy = Q.front()->morton_xy;
                          string s_z = Q.front()->morton_z;
@@ -988,11 +1011,11 @@ public:
                          countPositionXYZ(itn.x,itn.y,itn.z,n_xy,n_z);
 
                          if((*itN)->h > Q.front()->h + TravelCost(q,itn,goal.z)){
-                         (*itN)->h = Q.front()->h + TravelCost(q,itn,goal.z);
-                         if(!isContainedQ(*itN,Q) && !isContainedQ(*itN,closed) && !isContainedQ(*itN,traversability)){
-                             Q.push_back(*itN);
+                             (*itN)->h = Q.front()->h + TravelCost(q,itn,goal.z);
+                             if(!isContainedQ(*itN,Q) && !isContainedQ(*itN,closed) && !isContainedQ(*itN,traversability)){
+                                 Q.push_back(*itN);
+                             }
                          }
-                     }
                      }
                      itN++;
                  }

@@ -98,12 +98,29 @@ ${PCL_LIBRARIES}
 #${PCL_LIBRARIES}
 #${OpenCV_LIBS} )
 
-
-add_executable(test_mine
- src/test/testopebmp.cpp)
-target_link_libraries(test_mine
+#test
+add_executable(txt2pcd
+ src/test/txt2pcd.cpp)
+target_link_libraries(txt2pcd
 ${PCL_LIBRARIES}
  ${OpenCV_LIBS} )
+add_executable(bag2pcd
+ src/test/bag2pcd.cpp)
+target_link_libraries(bag2pcd
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
+add_executable(testSth
+ src/test/testSth.cpp)
+target_link_libraries(testSth
+${PCL_LIBRARIES}
+ ${OpenCV_LIBS} )
+
+#kitti to pcd
+#ADD_EXECUTABLE(kitti2pcd src/test/kitti2pcd.cpp)
+#TARGET_LINK_LIBRARIES(kitti2pcd ${Boost_LIBRARIES} ${PCL_LIBRARIES})
+
+#ADD_EXECUTABLE(kittitrackletextract src/test/tracklets.h src/test/kittitrackletextract.cpp )
+#TARGET_LINK_LIBRARIES(kittitrackletextract ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 
 #install(TARGETS ${PROJECT_NAME}
 #  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
